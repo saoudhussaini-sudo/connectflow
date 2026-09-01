@@ -1,6 +1,6 @@
 /**
  * ConnectFlow - Minimalist Popup Controller
- * Real-Time Dynamic State Subscription & Controls
+ * Real-Time Dynamic State Subscription, Controls & Diagnostics
  */
 
 (function () {
@@ -38,7 +38,16 @@
     btnStop: document.getElementById('btn-stop'),
 
     limitOverlay: document.getElementById('limit-overlay'),
-    btnNewSession: document.getElementById('btn-new-session')
+    btnNewSession: document.getElementById('btn-new-session'),
+
+    // Diagnostics
+    btnToggleDiagnostics: document.getElementById('btn-toggle-diagnostics'),
+    diagnosticsToggleLabel: document.getElementById('diagnostics-toggle-label'),
+    diagnosticsContent: document.getElementById('diagnostics-content'),
+    diagState: document.getElementById('diag-state'),
+    diagButtonsFound: document.getElementById('diag-buttons-found'),
+    diagEligibleCount: document.getElementById('diag-eligible-count'),
+    diagOpId: document.getElementById('diag-op-id')
   };
 
   let currentState = {
@@ -49,8 +58,11 @@
     errorCount: 0,
     maxRequests: MAX_REQUESTS,
     currentProfile: null,
-    activityFeed: []
+    activityFeed: [],
+    sessionRunId: null
   };
+
+  let isDiagnosticsOpen = false;
 
   async function init() {
     bindEvents();
@@ -65,6 +77,14 @@
 
     DOM.btnClearActivity.addEventListener('click', handleClearActivity);
     DOM.btnNewSession.addEventListener('click', handleResetSession);
+
+    DOM.btnToggleDiagnostics.addEventListener('click', toggleDiagnostics);
+  }
+
+  function toggleDiagnostics() {
+    isDiagnosticsOpen = !isDiagnosticsOpen;
+    DOM.diagnosticsContent.classList.toggle('hidden', !isDiagnosticsOpen);
+    DOM.diagnosticsToggleLabel.textContent = isDiagnosticsOpen ? 'Hide' : 'Show';
   }
 
   async function fetchState() {
@@ -154,6 +174,7 @@
     renderActivity();
     renderControls();
     renderLimit();
+    renderDiagnostics();
   }
 
   function renderStatus() {
@@ -301,6 +322,11 @@
       row.appendChild(msg);
       DOM.activityList.appendChild(row);
     });
+  }
+
+  function renderDiagnostics() {
+    if (DOM.diagState) DOM.diagState.textContent = currentState.status || 'IDLE';
+    if (DOM.diagOpId) DOM.diagOpId.textContent = currentState.sessionRunId || '--';
   }
 
   function renderControls() {

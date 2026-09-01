@@ -1,8 +1,7 @@
 /**
  * ConnectFlow - LinkedIn Content Script Orchestrator
  * High-reliability, watchdog-protected automated 5-second connection loop.
- * Guarantees zero hanging states with strict step timeouts, deduplication,
- * resource tracking, and automatic self-healing recovery.
+ * Features robust discovery, multi-strategy detection, and full diagnostic logging.
  */
 
 (function () {
@@ -138,11 +137,12 @@
     }
 
     start() {
-      logDebug('START_SESSION', 'Initializing run (5s interval)...');
+      logDebug('START_SESSION', 'Initializing 5s loop session...');
       this.isRunning = true;
       this.sessionRunId = 'run_' + Date.now();
       this.currentOperationId = 0;
       this.cleanupCurrentOperation();
+      this.startObserver();
       this.processNextCycle();
     }
 
@@ -156,6 +156,7 @@
       logDebug('RESUME_SESSION', 'Resuming loop...');
       this.isRunning = true;
       this.cleanupCurrentOperation();
+      this.startObserver();
       this.processNextCycle();
     }
 
@@ -174,43 +175,64 @@
       this.processedElements = new WeakSet();
     }
 
+    startObserver() {
+      if (this.observer) return;
+
+      this.observer = new MutationObserver(() => {
+        if (!this.isRunning || this.currentCandidate || this.isProcessing) return;
+      });
+
+      this.observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      this.activeObservers.add(this.observer);
+    }
+
+    /**
+     * Primary Automated Loop Cycle
+     */
     async processNextCycle() {
       if (!this.isRunning || this.isProcessing) return;
 
       const opId = ++this.currentOperationId;
       const runId = this.sessionRunId;
 
-      logDebug('LOOP_STEP', `Starting cycle opId=${opId}, current sentCount=${this.sentCount}/${MAX_REQUESTS}`);
+      logDebug('SCAN START', `Checking DOM for candidates (Cycle opId=${opId}, sentCount=${this.sentCount}/${MAX_REQUESTS})`);
 
+      // Check hard ceiling
       if (this.sentCount >= MAX_REQUESTS) {
         logDebug('LIMIT_REACHED', '100 requests reached. Stopping session.');
         this.stop();
         return;
       }
 
+      // Notify background: Scanning
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.STATE_TRANSITION,
-        payload: { nextState: STATES.SCANNING, statusDetail: 'Scanning for eligible profiles...' }
+        payload: { nextState: STATES.SCANNING, statusDetail: 'Scanning for eligible profiles on page...' }
       });
 
-      const candidate = this.findNextEligibleProfile();
+      // Run Discovery with Diagnostic Logging
+      const candidate = this.findNextEligibleProfileWithDiagnostics();
 
       if (!candidate) {
-        logDebug('SCAN', 'No eligible connect button visible in current view. Scrolling...');
-        
+        logDebug('SCAN RESULT', 'No unvisited eligible Connect button found in current viewport. Scrolling down...');
+
         chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.ACTIVITY_LOG,
-          payload: { message: 'No eligible connect button visible. Scrolling page...', type: 'info' }
+          payload: { message: 'No eligible button visible. Scrolling page to load more...', type: 'info' }
         });
 
         window.scrollBy({ top: 400, behavior: 'smooth' });
 
         this.setTimeoutGuarded(() => {
           if (this.isValidRun(opId, runId)) {
-            const retryCandidate = this.findNextEligibleProfile();
+            const retryCandidate = this.findNextEligibleProfileWithDiagnostics();
             if (retryCandidate) {
               this.executeCandidateLifecycle(retryCandidate, opId, runId);
             } else {
+              // Retry scan in 2 seconds
               this.scheduleNextCycle(2000);
             }
           }
@@ -219,22 +241,47 @@
         return;
       }
 
+      // Candidate found: execute lifecycle
       await this.executeCandidateLifecycle(candidate, opId, runId);
     }
 
-    findNextEligibleProfile() {
-      const candidates = Detector.scanProfiles(document);
-      for (const candidate of candidates) {
+    /**
+     * Finds next eligible profile and outputs detailed diagnostic logs
+     */
+    findNextEligibleProfileWithDiagnostics() {
+      const discovery = Detector.findConnectButtons(document);
+
+      logDebug('TOTAL BUTTON CANDIDATES', discovery.totalFound);
+      logDebug('ELIGIBLE CONNECT BUTTONS', discovery.eligibleCount);
+
+      for (const candidate of discovery.candidates) {
         const key = candidate.metadata.profileKey;
         const btn = candidate.element;
+        const isProcessed = this.processedProfileKeys.has(key) || this.processedElements.has(btn);
 
-        if (!this.processedProfileKeys.has(key) && !this.processedElements.has(btn)) {
+        logDebug('BUTTON CANDIDATE', {
+          name: candidate.metadata.name,
+          key,
+          isProcessed,
+          text: (btn.textContent || '').trim(),
+          aria: btn.getAttribute('aria-label') || '',
+          class: btn.className,
+          visible: Detector.isVisible(btn),
+          disabled: !!btn.disabled
+        });
+
+        if (!isProcessed) {
+          logDebug('PROFILE ACCEPTED', `Selected: ${candidate.metadata.name} (Key: ${key})`);
           return candidate;
         }
       }
+
       return null;
     }
 
+    /**
+     * Executes the complete profile lifecycle with global watchdog protection
+     */
     async executeCandidateLifecycle(candidate, opId, runId) {
       if (!this.isValidRun(opId, runId)) return;
 
@@ -245,11 +292,13 @@
       const button = candidate.element;
       const initialText = button.textContent || '';
 
+      // Register deduplication immediately
       this.processedProfileKeys.add(profile.profileKey);
       this.processedElements.add(button);
 
-      logDebug('PROFILE_FOUND', `Processing: ${profile.name} (Key: ${profile.profileKey})`);
+      logDebug('PROFILE READY', `Executing: ${profile.name} (Key: ${profile.profileKey})`);
 
+      // Scroll into view & Highlight
       try {
         candidate.cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } catch (e) {
@@ -257,39 +306,46 @@
       }
       this.highlightCandidate(candidate);
 
+      // Notify background: Profile Detected
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.PROFILE_DETECTED,
         payload: { profile }
       });
 
+      // Transition to Processing State
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.REQUEST_PROCESSING,
         payload: { profile }
       });
 
+      // Global Step Watchdog (Guarantees recovery within 20 seconds if anything hangs)
       let isStepFinished = false;
       const watchdogTimer = this.setTimeoutGuarded(() => {
         if (!isStepFinished && this.isValidRun(opId, runId)) {
-          logDebug('WATCHDOG_TRIGGERED', `Global watchdog timeout expired on ${profile.name}`);
+          logDebug('WATCHDOG_TRIGGERED', `Watchdog expired on ${profile.name}`);
           isStepFinished = true;
           this.handleStepTimeout('GLOBAL_STEP_WATCHDOG', profile, opId, runId);
         }
       }, TIMEOUTS.GLOBAL_STEP_WATCHDOG);
 
       try {
+        // Step 1: Click Connect Button
         logDebug('ACTION_CLICK', `Clicking Connect button for ${profile.name}`);
         button.click();
 
+        // Step 2: Handle any "Send without a note" or "Send" modal (with strict timeout)
         logDebug('MODAL_CHECK', `Checking for invitation modal dialog...`);
         await this.handlePotentialModalWithTimeout(opId, runId, TIMEOUTS.MODAL_HANDLER_TIMEOUT);
 
         if (!this.isValidRun(opId, runId) || isStepFinished) return;
 
+        // Step 3: Transition to Verifying State
         chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.REQUEST_VERIFYING,
           payload: { profile }
         });
 
+        // Step 4: Verify that invitation was actually dispatched (with strict timeout)
         logDebug('VERIFYING', `Verifying status changed to Pending...`);
         const verified = await this.verifyActionSuccessWithTimeout(button, initialText, opId, runId, TIMEOUTS.VERIFICATION_TIMEOUT);
 

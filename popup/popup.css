@@ -231,16 +231,13 @@ body {
   margin-top: 4px;
 }
 
-.profile-actions {
-  display: flex;
-  gap: 8px;
-}
-
 /* Activity Section */
-.activity-header {
+.activity-header,
+.diagnostics-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  cursor: pointer;
 }
 
 .btn-text {
@@ -297,6 +294,30 @@ body {
   padding: 6px 0;
 }
 
+/* Diagnostics Panel */
+.diagnostics-content {
+  background: #080808;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+}
+
+.diag-row {
+  display: flex;
+  justify-content: space-between;
+  color: #666666;
+}
+
+.diag-val {
+  color: #cccccc;
+  font-weight: 600;
+}
+
 /* Buttons */
 .btn {
   font-family: inherit;
@@ -318,22 +339,6 @@ body {
 .btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
-}
-
-.btn-primary {
-  background-color: #ffffff;
-  color: #000000;
-  border-color: #ffffff;
-  flex: 1;
-}
-
-.btn-primary:not(:disabled):hover {
-  background-color: #e5e5e5;
-  border-color: #e5e5e5;
-}
-
-.btn-primary:not(:disabled):active {
-  background-color: #cccccc;
 }
 
 .btn-secondary {

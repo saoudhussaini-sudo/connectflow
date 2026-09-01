@@ -88,6 +88,22 @@
 
       <div class="divider"></div>
 
+      <!-- Diagnostics Panel -->
+      <section class="section diagnostics-section">
+        <div class="diagnostics-header" id="btn-toggle-diagnostics">
+          <span class="section-title">DIAGNOSTICS</span>
+          <span class="btn-text" id="diagnostics-toggle-label">Show</span>
+        </div>
+        <div class="diagnostics-content hidden" id="diagnostics-content">
+          <div class="diag-row"><span>State:</span> <span class="diag-val" id="diag-state">IDLE</span></div>
+          <div class="diag-row"><span>DOM Buttons Found:</span> <span class="diag-val" id="diag-buttons-found">0</span></div>
+          <div class="diag-row"><span>Eligible Candidates:</span> <span class="diag-val" id="diag-eligible-count">0</span></div>
+          <div class="diag-row"><span>Active Session Run:</span> <span class="diag-val" id="diag-op-id">--</span></div>
+        </div>
+      </section>
+
+      <div class="divider"></div>
+
       <!-- Global Session Controls -->
       <section class="controls-section">
         <button class="btn btn-main" id="btn-start">START AUTOMATED LOOP (5s)</button>
