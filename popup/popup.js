@@ -175,7 +175,7 @@
         DOM.statusLabel.textContent = 'VERIFYING';
         break;
       case STATES.WAITING_DELAY:
-        DOM.statusLabel.textContent = 'WAITING (10s)';
+        DOM.statusLabel.textContent = 'WAITING (5s)';
         break;
       case STATES.PAUSED:
         DOM.statusLabel.textContent = 'PAUSED';
@@ -239,7 +239,7 @@
       } else if (status === STATES.VERIFYING) {
         DOM.profileStatus.textContent = 'STATUS: VERIFYING INVITATION...';
       } else if (status === STATES.WAITING_DELAY) {
-        DOM.profileStatus.textContent = 'STATUS: VERIFIED — NEXT IN 10s';
+        DOM.profileStatus.textContent = 'STATUS: VERIFIED — NEXT IN 5s';
       } else if (status === STATES.PAUSED) {
         DOM.profileStatus.textContent = 'STATUS: PAUSED';
       } else {
@@ -252,8 +252,8 @@
         DOM.profileStatus.textContent = 'STATUS: SCANNING';
       } else if (status === STATES.WAITING_DELAY) {
         DOM.profileName.textContent = 'Cycle Cooldown';
-        DOM.profileHeadline.textContent = '10s safety delay between connection requests.';
-        DOM.profileStatus.textContent = 'STATUS: NEXT REQUEST IN 10s';
+        DOM.profileHeadline.textContent = '5s safety delay between connection requests.';
+        DOM.profileStatus.textContent = 'STATUS: NEXT REQUEST IN 5s';
       } else if (status === STATES.TIMEOUT) {
         DOM.profileName.textContent = 'Recovering from Timeout';
         DOM.profileHeadline.textContent = 'Previous action timed out and was skipped.';

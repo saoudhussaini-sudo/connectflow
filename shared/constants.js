@@ -15,17 +15,17 @@
   // Hard Session Ceiling
   const MAX_REQUESTS = 100;
 
-  // Automated Loop Delay
-  const LOOP_INTERVAL_MS = 10000; // 10 seconds between requests
+  // Automated Loop Delay (5 seconds between requests)
+  const LOOP_INTERVAL_MS = 5000;
 
   // Watchdog & Asynchronous Timeouts (ms)
   const TIMEOUTS = {
-    GLOBAL_STEP_WATCHDOG: 25000,   // 25s max for any single profile cycle
-    SCAN_TIMEOUT: 12000,           // 12s scan timeout before scrolling/retrying
-    CLICK_ACTION_TIMEOUT: 5000,    // 5s to trigger click & verify interaction
-    MODAL_HANDLER_TIMEOUT: 4000,   // 4s max to detect & dismiss note dialog
-    VERIFICATION_TIMEOUT: 6000,    // 6s max to verify 'Pending' status
-    MESSAGE_RESPONSE_TIMEOUT: 5000 // 5s timeout on runtime messages
+    GLOBAL_STEP_WATCHDOG: 20000,   // 20s max for any single profile cycle
+    SCAN_TIMEOUT: 10000,           // 10s scan timeout before scrolling/retrying
+    CLICK_ACTION_TIMEOUT: 4000,    // 4s to trigger click & verify interaction
+    MODAL_HANDLER_TIMEOUT: 3500,   // 3.5s max to detect & dismiss note dialog
+    VERIFICATION_TIMEOUT: 5000,    // 5s max to verify 'Pending' status
+    MESSAGE_RESPONSE_TIMEOUT: 4000 // 4s timeout on runtime messages
   };
 
   // Authoritative State Machine States

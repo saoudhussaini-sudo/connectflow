@@ -638,7 +638,7 @@
         </div>
         <h1 class="hero-title">Automated LinkedIn Connections with Safety First.</h1>
         <p class="hero-desc">
-          Minimalist, high-performance assistant with an automated 10-second dispatch loop, global watchdog protection, and a strict 100-request hard session ceiling.
+          Minimalist, high-performance assistant with an automated 5-second dispatch loop, global watchdog protection, and a strict 100-request hard session ceiling.
         </p>
         <div class="hero-buttons">
           <a href="#install" class="btn-install">
@@ -728,7 +728,7 @@
               </div>
               <div class="sim-act-item">
                 <span class="sim-act-time">19:42:01</span>
-                <span class="sim-act-msg">Automated 10s session started.</span>
+                <span class="sim-act-msg">Automated 5s session started.</span>
               </div>
             </div>
           </div>
@@ -737,7 +737,7 @@
 
           <!-- Controls -->
           <div id="sim-controls-idle">
-            <button class="sim-btn sim-btn-main" id="sim-btn-start">START AUTOMATED LOOP (10s)</button>
+            <button class="sim-btn sim-btn-main" id="sim-btn-start">START AUTOMATED LOOP (5s)</button>
           </div>
           <div class="sim-btn-controls" id="sim-controls-active" style="display: none;">
             <button class="sim-btn sim-btn-sec" id="sim-btn-pause">PAUSE</button>
@@ -759,8 +759,8 @@
       <div class="features-grid">
         <div class="feature-card">
           <span class="feature-num">01</span>
-          <h3 class="feature-title">Automated 10s Loop</h3>
-          <p class="feature-desc">Continuous, debounced profile discovery and connection dispatch at steady 10-second intervals without repetitive manual clicks.</p>
+          <h3 class="feature-title">Automated 5s Loop</h3>
+          <p class="feature-desc">Continuous, debounced profile discovery and connection dispatch at steady 5-second intervals without repetitive manual clicks.</p>
         </div>
 
         <div class="feature-card">
@@ -893,8 +893,8 @@
         isRunning = true;
         idleRow.style.display = 'none';
         activeRow.style.display = 'flex';
-        statusText.textContent = 'LOOP (10s)';
-        addActivity('Automated 10s session started.');
+        statusText.textContent = 'LOOP (5s)';
+        addActivity('Automated 5s session started.');
         runCycle();
       });
 
@@ -908,7 +908,7 @@
           addActivity('Session paused by user.');
         } else {
           isRunning = true;
-          statusText.textContent = 'LOOP (10s)';
+          statusText.textContent = 'LOOP (5s)';
           btnPause.textContent = 'PAUSE';
           addActivity('Session resumed.');
           runCycle();
@@ -940,7 +940,7 @@
           if (!isRunning) return;
           count = Math.min(100, count + 1);
           updateUI();
-          profStatus.textContent = 'STATUS: VERIFIED — NEXT IN 10s';
+          profStatus.textContent = 'STATUS: VERIFIED — NEXT IN 5s';
           addActivity(`Request sent to ${cand.name} (${count}/100)`);
 
           if (count >= 100) {
@@ -950,8 +950,8 @@
             return;
           }
 
-          timer = setTimeout(runCycle, 4000);
-        }, 1500);
+          timer = setTimeout(runCycle, 2000);
+        }, 1200);
       }
     })();
   </script>

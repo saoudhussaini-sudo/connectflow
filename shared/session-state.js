@@ -97,15 +97,11 @@
         type
       };
 
-      // Keep latest 80 items
       this.state.activityFeed = [entry, ...this.state.activityFeed].slice(0, 80);
       this.persist();
       this.notify();
     }
 
-    /**
-     * Authoritative State Transition
-     */
     async transitionTo(nextState, statusDetail = '', profile = null) {
       if (!STATES[nextState]) {
         console.error(`[ConnectFlow] Invalid state transition requested: ${nextState}`);
@@ -125,9 +121,6 @@
       return this.getState();
     }
 
-    /**
-     * Start automated session
-     */
     async startSession() {
       if (this.state.sentCount >= MAX_REQUESTS) {
         this.state.status = STATES.LIMIT_REACHED;
@@ -145,7 +138,7 @@
         this.state.sessionStartTime = Date.now();
       }
       this.state.errorMessage = null;
-      this.logActivity('Automated 10s session started.', 'info');
+      this.logActivity('Automated 5s session started.', 'info');
       await this.persist();
       this.notify();
       return this.getState();
@@ -237,7 +230,7 @@
         this.logActivity('Session limit reached (100/100). Automated loop finished.', 'limit');
       } else {
         this.state.status = STATES.WAITING_DELAY;
-        this.state.statusDetail = `Waiting 10s before next request (${current}/${MAX_REQUESTS})...`;
+        this.state.statusDetail = `Waiting 5s before next request (${current}/${MAX_REQUESTS})...`;
       }
 
       await this.persist();

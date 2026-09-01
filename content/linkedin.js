@@ -1,6 +1,6 @@
 /**
  * ConnectFlow - LinkedIn Content Script Orchestrator
- * High-reliability, watchdog-protected automated 10-second connection loop.
+ * High-reliability, watchdog-protected automated 5-second connection loop.
  * Guarantees zero hanging states with strict step timeouts, deduplication,
  * resource tracking, and automatic self-healing recovery.
  */
@@ -90,10 +90,6 @@
       });
     }
 
-    // ==========================================
-    // Guarded Timer & Resource Management
-    // ==========================================
-
     setTimeoutGuarded(fn, delayMs) {
       const timerId = setTimeout(() => {
         this.activeTimers.delete(timerId);
@@ -123,14 +119,12 @@
     }
 
     cleanupCurrentOperation() {
-      // Clear all active timers
       for (const timerId of this.activeTimers) {
         clearTimeout(timerId);
         clearInterval(timerId);
       }
       this.activeTimers.clear();
 
-      // Disconnect all active observers
       for (const observer of this.activeObservers) {
         try {
           observer.disconnect();
@@ -138,19 +132,13 @@
       }
       this.activeObservers.clear();
 
-      // Clear DOM highlights
       this.clearHighlight();
-
       this.currentCandidate = null;
       this.isProcessing = false;
     }
 
-    // ==========================================
-    // Lifecycle Controls
-    // ==========================================
-
     start() {
-      logDebug('START_SESSION', 'Initializing run...');
+      logDebug('START_SESSION', 'Initializing run (5s interval)...');
       this.isRunning = true;
       this.sessionRunId = 'run_' + Date.now();
       this.currentOperationId = 0;
@@ -186,10 +174,6 @@
       this.processedElements = new WeakSet();
     }
 
-    // ==========================================
-    // Primary Workflow Loop
-    // ==========================================
-
     async processNextCycle() {
       if (!this.isRunning || this.isProcessing) return;
 
@@ -198,20 +182,17 @@
 
       logDebug('LOOP_STEP', `Starting cycle opId=${opId}, current sentCount=${this.sentCount}/${MAX_REQUESTS}`);
 
-      // Check hard ceiling
       if (this.sentCount >= MAX_REQUESTS) {
         logDebug('LIMIT_REACHED', '100 requests reached. Stopping session.');
         this.stop();
         return;
       }
 
-      // Notify background: Scanning
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.STATE_TRANSITION,
         payload: { nextState: STATES.SCANNING, statusDetail: 'Scanning for eligible profiles...' }
       });
 
-      // Scan page for candidate
       const candidate = this.findNextEligibleProfile();
 
       if (!candidate) {
@@ -230,16 +211,14 @@
             if (retryCandidate) {
               this.executeCandidateLifecycle(retryCandidate, opId, runId);
             } else {
-              // Retry scan in 3 seconds
-              this.scheduleNextCycle(3000);
+              this.scheduleNextCycle(2000);
             }
           }
-        }, 1800);
+        }, 1500);
 
         return;
       }
 
-      // Candidate found: execute lifecycle
       await this.executeCandidateLifecycle(candidate, opId, runId);
     }
 
@@ -256,9 +235,6 @@
       return null;
     }
 
-    /**
-     * Executes the complete profile lifecycle with global watchdog protection
-     */
     async executeCandidateLifecycle(candidate, opId, runId) {
       if (!this.isValidRun(opId, runId)) return;
 
@@ -269,13 +245,11 @@
       const button = candidate.element;
       const initialText = button.textContent || '';
 
-      // Register deduplication immediately
       this.processedProfileKeys.add(profile.profileKey);
       this.processedElements.add(button);
 
       logDebug('PROFILE_FOUND', `Processing: ${profile.name} (Key: ${profile.profileKey})`);
 
-      // Scroll into view & Highlight
       try {
         candidate.cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } catch (e) {
@@ -283,7 +257,6 @@
       }
       this.highlightCandidate(candidate);
 
-      // Notify background: Profile Detected & Processing
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.PROFILE_DETECTED,
         payload: { profile }
@@ -294,7 +267,6 @@
         payload: { profile }
       });
 
-      // Global Step Watchdog (Guarantees recovery within 25 seconds if anything hangs)
       let isStepFinished = false;
       const watchdogTimer = this.setTimeoutGuarded(() => {
         if (!isStepFinished && this.isValidRun(opId, runId)) {
@@ -305,23 +277,19 @@
       }, TIMEOUTS.GLOBAL_STEP_WATCHDOG);
 
       try {
-        // Step 1: Click Connect Button
         logDebug('ACTION_CLICK', `Clicking Connect button for ${profile.name}`);
         button.click();
 
-        // Step 2: Handle any "Send without a note" or "Send" modal (with strict timeout)
         logDebug('MODAL_CHECK', `Checking for invitation modal dialog...`);
         await this.handlePotentialModalWithTimeout(opId, runId, TIMEOUTS.MODAL_HANDLER_TIMEOUT);
 
         if (!this.isValidRun(opId, runId) || isStepFinished) return;
 
-        // Step 3: Transition to Verifying State
         chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.REQUEST_VERIFYING,
           payload: { profile }
         });
 
-        // Step 4: Verify that invitation was actually dispatched (with strict timeout)
         logDebug('VERIFYING', `Verifying status changed to Pending...`);
         const verified = await this.verifyActionSuccessWithTimeout(button, initialText, opId, runId, TIMEOUTS.VERIFICATION_TIMEOUT);
 
@@ -371,13 +339,12 @@
           return;
         }
 
-        // Schedule next request in 10 seconds if session is active
         if (this.isRunning && this.sessionRunId === runId) {
           logDebug('SCHEDULE_NEXT', `Waiting ${LOOP_INTERVAL_MS / 1000}s before next cycle...`);
           
           chrome.runtime.sendMessage({
             type: MESSAGE_TYPES.WAITING_NEXT_CYCLE,
-            payload: { remainingSeconds: 10 }
+            payload: { remainingSeconds: 5 }
           });
 
           this.scheduleNextCycle(LOOP_INTERVAL_MS);
@@ -385,9 +352,6 @@
       }
     }
 
-    /**
-     * Timeout Recovery Handler
-     */
     handleStepTimeout(stage, profile, opId, runId) {
       this.clearHighlight();
       this.isProcessing = false;
@@ -398,9 +362,8 @@
         payload: { stage, profile }
       });
 
-      // Safely schedule recovery scan in 2 seconds
       if (this.isRunning && this.sessionRunId === runId) {
-        this.scheduleNextCycle(2000);
+        this.scheduleNextCycle(1500);
       }
     }
 
@@ -415,10 +378,6 @@
     isValidRun(opId, runId) {
       return this.isRunning && this.sessionRunId === runId && this.currentOperationId === opId;
     }
-
-    // ==========================================
-    // Guarded LinkedIn DOM Interaction Helpers
-    // ==========================================
 
     async handlePotentialModalWithTimeout(opId, runId, timeoutMs = TIMEOUTS.MODAL_HANDLER_TIMEOUT) {
       return new Promise(resolve => {
@@ -460,11 +419,10 @@
               checkInterval();
               clearTimeout(timer);
               sendBtn.click();
-              this.setTimeoutGuarded(resolve, 300);
+              this.setTimeoutGuarded(resolve, 250);
               return;
             }
 
-            // Check if limit modal appeared
             const modalText = (modal.textContent || '').toLowerCase();
             if (modalText.includes("you've reached the weekly invitation limit") || modalText.includes('invitation limit')) {
               finished = true;
@@ -476,7 +434,7 @@
               return;
             }
           }
-        }, 150);
+        }, 120);
       });
     }
 
@@ -500,7 +458,6 @@
             return;
           }
 
-          // Check 1: Button classification is PENDING
           const classification = Detector.classifyButton(button);
           if (classification.status === 'PENDING') {
             finished = true;
@@ -510,7 +467,6 @@
             return;
           }
 
-          // Check 2: Button text contains "pending" or "invitation sent"
           const currentText = (button.textContent || '').trim().toLowerCase();
           if (currentText.includes('pending') || currentText.includes('invitation sent')) {
             finished = true;
@@ -520,7 +476,6 @@
             return;
           }
 
-          // Check 3: Container status
           const card = Detector.findCardContainer(button);
           if (card) {
             const cardText = (card.textContent || '').toLowerCase();
@@ -533,7 +488,6 @@
             }
           }
 
-          // Check 4: Button detached / disabled without error modal
           if (!button.isConnected || button.disabled) {
             finished = true;
             checkInterval();
@@ -541,13 +495,9 @@
             resolve(true);
             return;
           }
-        }, 150);
+        }, 120);
       });
     }
-
-    // ==========================================
-    // DOM Highlight Management
-    // ==========================================
 
     highlightCandidate(candidate) {
       this.clearHighlight();
