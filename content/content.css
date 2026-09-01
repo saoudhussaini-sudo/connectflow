@@ -1,0 +1,31 @@
+/**
+ * ConnectFlow - Minimalist On-Page Target Outline
+ * Monochrome developer-utility highlight
+ */
+
+.connectflow-highlighted-card {
+  position: relative !important;
+  outline: 2px solid #ffffff !important;
+  outline-offset: 2px !important;
+  border-radius: 4px !important;
+  transition: outline-color 0.15s ease !important;
+  z-index: 99 !important;
+}
+
+.connectflow-badge-indicator {
+  position: absolute;
+  top: -10px;
+  right: 8px;
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #333333;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', Menlo, monospace;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-radius: 2px;
+  z-index: 100;
+  pointer-events: none;
+}

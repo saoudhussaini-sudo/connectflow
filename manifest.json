@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "ConnectFlow — LinkedIn Connection Assistant",
+  "version": "1.0.0",
+  "description": "Intelligent glassmorphic LinkedIn connection assistant with 100-request safety ceiling and user confirmation.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.linkedin.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.linkedin.com/*"
+      ],
+      "js": [
+        "shared/constants.js",
+        "content/linkedin-detector.js",
+        "content/linkedin.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "ConnectFlow Assistant",
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "32": "assets/icons/icon-32.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "32": "assets/icons/icon-32.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "shared/constants.js",
+        "content/content.css",
+        "assets/icons/*"
+      ],
+      "matches": [
+        "https://*.linkedin.com/*"
+      ]
+    }
+  ]
+}

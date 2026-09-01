@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConnectFlow</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <h1 class="brand-title">CONNECTFLOW</h1>
+        <p class="brand-subtitle">LinkedIn Connection Assistant</p>
+      </div>
+      <div class="status-indicator">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="status-label" id="status-label">READY</span>
+      </div>
+    </header>
+
+    <div class="divider"></div>
+
+    <!-- Main Content Area -->
+    <main class="content">
+
+      <!-- Requests Hero -->
+      <section class="section requests-section">
+        <div class="section-title">REQUESTS</div>
+        <div class="requests-row">
+          <div class="requests-numbers">
+            <span class="count-current" id="sent-count">0</span>
+            <span class="count-divider">/</span>
+            <span class="count-max" id="max-count">100</span>
+          </div>
+          <span class="requests-remaining"><span id="remaining-count">100</span> remaining</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+      </section>
+
+      <div class="divider"></div>
+
+      <!-- Statistics (3-column minimalist layout) -->
+      <section class="stats-section">
+        <div class="stat-col">
+          <span class="stat-label">SENT</span>
+          <span class="stat-value" id="stat-sent">0</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-col">
+          <span class="stat-label">SKIPPED</span>
+          <span class="stat-value" id="stat-skipped">0</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-col">
+          <span class="stat-label">ERRORS</span>
+          <span class="stat-value" id="stat-errors">0</span>
+        </div>
+      </section>
+
+      <div class="divider"></div>
+
+      <!-- Current Profile Section -->
+      <section class="section profile-section">
+        <div class="section-title">CURRENT PROFILE</div>
+        <div class="profile-details">
+          <div class="profile-name" id="profile-name">No Profile Active</div>
+          <div class="profile-headline" id="profile-headline">Start session on LinkedIn to begin scanning.</div>
+          <div class="profile-status" id="profile-status">STATUS: IDLE</div>
+        </div>
+      </section>
+
+      <div class="divider"></div>
+
+      <!-- Activity Section -->
+      <section class="section activity-section">
+        <div class="activity-header">
+          <span class="section-title">ACTIVITY LOG</span>
+          <button class="btn-text" id="btn-clear-activity">Clear</button>
+        </div>
+        <div class="activity-list" id="activity-list">
+          <div class="activity-empty" id="activity-empty">No activity recorded yet.</div>
+        </div>
+      </section>
+
+      <div class="divider"></div>
+
+      <!-- Global Session Controls -->
+      <section class="controls-section">
+        <button class="btn btn-main" id="btn-start">START AUTOMATED LOOP (10s)</button>
+        
+        <div class="active-controls-row hidden" id="active-controls-row">
+          <button class="btn btn-secondary flex-1" id="btn-pause">PAUSE</button>
+          <button class="btn btn-danger flex-1" id="btn-stop">STOP</button>
+        </div>
+      </section>
+
+      <!-- Limit Reached Notice (Shown when 100 requests reached) -->
+      <div class="limit-overlay hidden" id="limit-overlay">
+        <div class="limit-card">
+          <div class="limit-title">SESSION COMPLETE</div>
+          <div class="limit-metric">100 / 100</div>
+          <p class="limit-desc">100-request session limit reached. Further request processing is halted.</p>
+          <button class="btn btn-main w-full" id="btn-new-session">START NEW SESSION</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="../shared/constants.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
