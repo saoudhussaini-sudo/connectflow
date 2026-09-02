@@ -1,6 +1,6 @@
 /**
- * ConnectFlow - Minimalist Popup Controller
- * Real-Time Dynamic State Subscription, Controls & Diagnostics
+ * ConnectFlow - Apple-Style Popup Controller
+ * Real-time State Machine Sync, User-Confirmed Actions, Live Countdown & Diagnostics
  */
 
 (function () {
@@ -12,6 +12,7 @@
   const { MAX_REQUESTS, STATES, MESSAGE_TYPES } = Constants;
 
   const DOM = {
+    statusPill: document.getElementById('status-pill'),
     statusDot: document.getElementById('status-dot'),
     statusLabel: document.getElementById('status-label'),
 
@@ -24,9 +25,20 @@
     statSkipped: document.getElementById('stat-skipped'),
     statErrors: document.getElementById('stat-errors'),
 
+    profileCard: document.getElementById('profile-card'),
+    profileBadgeState: document.getElementById('profile-badge-state'),
+    profileInitials: document.getElementById('profile-initials'),
     profileName: document.getElementById('profile-name'),
     profileHeadline: document.getElementById('profile-headline'),
-    profileStatus: document.getElementById('profile-status'),
+    profileMutuals: document.getElementById('profile-mutuals'),
+    profileMutualsText: document.getElementById('profile-mutuals-text'),
+
+    profileActionsBox: document.getElementById('profile-actions-box'),
+    btnSendConfirm: document.getElementById('btn-send-confirm'),
+    btnSkipProfile: document.getElementById('btn-skip-profile'),
+
+    countdownBanner: document.getElementById('countdown-banner'),
+    countdownNum: document.getElementById('countdown-num'),
 
     activityList: document.getElementById('activity-list'),
     activityEmpty: document.getElementById('activity-empty'),
@@ -44,9 +56,12 @@
     btnToggleDiagnostics: document.getElementById('btn-toggle-diagnostics'),
     diagnosticsToggleLabel: document.getElementById('diagnostics-toggle-label'),
     diagnosticsContent: document.getElementById('diagnostics-content'),
-    diagState: document.getElementById('diag-state'),
+    diagCardsDetected: document.getElementById('diag-cards-detected'),
     diagButtonsFound: document.getElementById('diag-buttons-found'),
-    diagEligibleCount: document.getElementById('diag-eligible-count'),
+    diagWithMutuals: document.getElementById('diag-with-mutuals'),
+    diagWithoutMutuals: document.getElementById('diag-without-mutuals'),
+    diagProcessedCount: document.getElementById('diag-processed-count'),
+    diagState: document.getElementById('diag-state'),
     diagOpId: document.getElementById('diag-op-id')
   };
 
@@ -58,7 +73,15 @@
     errorCount: 0,
     maxRequests: MAX_REQUESTS,
     currentProfile: null,
+    countdownSeconds: 0,
     activityFeed: [],
+    diagnostics: {
+      profileCardsDetected: 0,
+      connectButtonsDetected: 0,
+      profilesWithMutuals: 0,
+      profilesWithoutMutuals: 0,
+      alreadyProcessed: 0
+    },
     sessionRunId: null
   };
 
@@ -74,6 +97,9 @@
     DOM.btnStart.addEventListener('click', handleStart);
     DOM.btnPause.addEventListener('click', handlePauseResume);
     DOM.btnStop.addEventListener('click', handleStop);
+
+    DOM.btnSendConfirm.addEventListener('click', handleSendConfirm);
+    DOM.btnSkipProfile.addEventListener('click', handleSkipProfile);
 
     DOM.btnClearActivity.addEventListener('click', handleClearActivity);
     DOM.btnNewSession.addEventListener('click', handleResetSession);
@@ -124,10 +150,29 @@
     try {
       const resp = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.START_SESSION });
       if (resp && resp.error === 'NO_LINKEDIN_TAB') {
-        DOM.profileStatus.textContent = 'STATUS: OPEN LINKEDIN TAB FIRST';
+        DOM.profileHeadline.textContent = 'Please open a LinkedIn tab first to start.';
       }
     } catch (err) {
       console.warn('[ConnectFlow] Start message failed:', err);
+    }
+  }
+
+  async function handleSendConfirm() {
+    try {
+      DOM.btnSendConfirm.disabled = true;
+      await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.CONFIRM_SEND_REQUEST });
+    } catch (err) {
+      console.warn('[ConnectFlow] Confirm send failed:', err);
+    } finally {
+      DOM.btnSendConfirm.disabled = false;
+    }
+  }
+
+  async function handleSkipProfile() {
+    try {
+      await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.SKIP_CURRENT_PROFILE });
+    } catch (err) {
+      console.warn('[ConnectFlow] Skip failed:', err);
     }
   }
 
@@ -166,6 +211,13 @@
     }
   }
 
+  function getInitials(name) {
+    if (!name || name === 'LinkedIn Member' || name === 'No Profile Active') return 'CF';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
   function render() {
     renderStatus();
     renderRequests();
@@ -180,44 +232,49 @@
   function renderStatus() {
     const status = currentState.status;
 
-    DOM.statusDot.classList.toggle('paused', status === STATES.PAUSED);
+    DOM.statusDot.className = 'status-dot';
 
     switch (status) {
       case STATES.SCANNING:
+        DOM.statusDot.classList.add('scanning');
         DOM.statusLabel.textContent = 'SCANNING';
         break;
-      case STATES.PROFILE_FOUND:
-        DOM.statusLabel.textContent = 'PROFILE FOUND';
+      case STATES.WAITING_FOR_CONFIRMATION:
+      case STATES.PROFILE_READY:
+        DOM.statusDot.classList.add('waiting');
+        DOM.statusLabel.textContent = 'QUALIFIED (READY)';
         break;
       case STATES.PROCESSING:
-        DOM.statusLabel.textContent = 'PROCESSING';
+        DOM.statusDot.classList.add('scanning');
+        DOM.statusLabel.textContent = 'CONNECTING';
         break;
       case STATES.VERIFYING:
+        DOM.statusDot.classList.add('scanning');
         DOM.statusLabel.textContent = 'VERIFYING';
         break;
-      case STATES.WAITING_DELAY:
-        DOM.statusLabel.textContent = 'WAITING (5s)';
+      case STATES.DELAYING:
+        DOM.statusDot.classList.add('scanning');
+        DOM.statusLabel.textContent = `5s COOLDOWN (${currentState.countdownSeconds || 5}s)`;
         break;
       case STATES.PAUSED:
+        DOM.statusDot.classList.add('paused');
         DOM.statusLabel.textContent = 'PAUSED';
         break;
       case STATES.LIMIT_REACHED:
-        DOM.statusLabel.textContent = 'COMPLETE (100)';
+        DOM.statusDot.classList.add('stopped');
+        DOM.statusLabel.textContent = '100 COMPLETE';
         break;
       case STATES.STOPPED:
+        DOM.statusDot.classList.add('stopped');
         DOM.statusLabel.textContent = 'STOPPED';
         break;
-      case STATES.TIMEOUT:
-        DOM.statusLabel.textContent = 'TIMEOUT';
-        break;
       case STATES.ERROR:
+        DOM.statusDot.classList.add('stopped');
         DOM.statusLabel.textContent = 'ERROR';
-        break;
-      case STATES.SKIPPED:
-        DOM.statusLabel.textContent = 'SKIPPED';
         break;
       case STATES.IDLE:
       default:
+        DOM.statusDot.classList.add('stopped');
         DOM.statusLabel.textContent = 'READY';
         break;
     }
@@ -246,51 +303,70 @@
     const status = currentState.status;
 
     if (profile && (
-      status === STATES.PROFILE_FOUND ||
+      status === STATES.WAITING_FOR_CONFIRMATION ||
+      status === STATES.PROFILE_READY ||
       status === STATES.PROCESSING ||
-      status === STATES.VERIFYING ||
-      status === STATES.WAITING_DELAY ||
-      status === STATES.PAUSED
+      status === STATES.VERIFYING
     )) {
       DOM.profileName.textContent = profile.name || 'LinkedIn Member';
-      DOM.profileHeadline.textContent = profile.headline || 'Professional';
+      DOM.profileHeadline.textContent = profile.headline || 'Professional on LinkedIn';
+      DOM.profileInitials.textContent = getInitials(profile.name);
 
-      if (status === STATES.PROCESSING) {
-        DOM.profileStatus.textContent = 'STATUS: CONNECTING...';
-      } else if (status === STATES.VERIFYING) {
-        DOM.profileStatus.textContent = 'STATUS: VERIFYING INVITATION...';
-      } else if (status === STATES.WAITING_DELAY) {
-        DOM.profileStatus.textContent = 'STATUS: VERIFIED — NEXT IN 5s';
-      } else if (status === STATES.PAUSED) {
-        DOM.profileStatus.textContent = 'STATUS: PAUSED';
+      const mutuals = profile.mutualConnections || 1;
+      DOM.profileMutualsText.textContent = `${mutuals} mutual connection${mutuals > 1 ? 's' : ''}`;
+      DOM.profileBadgeState.textContent = 'QUALIFIED';
+      DOM.profileBadgeState.className = 'profile-badge-state qualified';
+
+      // Show user confirmation buttons when waiting
+      if (status === STATES.WAITING_FOR_CONFIRMATION || status === STATES.PROFILE_READY) {
+        DOM.profileActionsBox.classList.remove('hidden');
+        DOM.countdownBanner.classList.add('hidden');
       } else {
-        DOM.profileStatus.textContent = 'STATUS: PROFILE DETECTED';
+        DOM.profileActionsBox.classList.add('hidden');
       }
     } else {
-      if (status === STATES.SCANNING) {
+      DOM.profileActionsBox.classList.add('hidden');
+
+      if (status === STATES.DELAYING) {
+        DOM.profileName.textContent = 'Next Request Cooldown';
+        DOM.profileHeadline.textContent = '5-second safety cooldown between user-confirmed sends.';
+        DOM.profileInitials.textContent = '5s';
+        DOM.profileBadgeState.textContent = 'DELAYING';
+        DOM.profileBadgeState.className = 'profile-badge-state';
+        DOM.profileMutualsText.textContent = 'Cooldown Active';
+
+        DOM.countdownBanner.classList.remove('hidden');
+        DOM.countdownNum.textContent = currentState.countdownSeconds || 5;
+      } else if (status === STATES.SCANNING) {
         DOM.profileName.textContent = 'Scanning LinkedIn...';
-        DOM.profileHeadline.textContent = 'Looking for next eligible connect button.';
-        DOM.profileStatus.textContent = 'STATUS: SCANNING';
-      } else if (status === STATES.WAITING_DELAY) {
-        DOM.profileName.textContent = 'Cycle Cooldown';
-        DOM.profileHeadline.textContent = '5s safety delay between connection requests.';
-        DOM.profileStatus.textContent = 'STATUS: NEXT REQUEST IN 5s';
-      } else if (status === STATES.TIMEOUT) {
-        DOM.profileName.textContent = 'Recovering from Timeout';
-        DOM.profileHeadline.textContent = 'Previous action timed out and was skipped.';
-        DOM.profileStatus.textContent = 'STATUS: TIMEOUT RECOVERED';
+        DOM.profileHeadline.textContent = 'Looking for candidates with ≥1 mutual connection.';
+        DOM.profileInitials.textContent = '🔍';
+        DOM.profileBadgeState.textContent = 'SCANNING';
+        DOM.profileBadgeState.className = 'profile-badge-state';
+        DOM.profileMutualsText.textContent = 'Filter: ≥ 1 Mutual Connection';
+        DOM.countdownBanner.classList.add('hidden');
       } else if (status === STATES.LIMIT_REACHED) {
         DOM.profileName.textContent = 'Session Complete';
         DOM.profileHeadline.textContent = '100 connection requests successfully processed.';
-        DOM.profileStatus.textContent = 'STATUS: 100 / 100 COMPLETE';
+        DOM.profileInitials.textContent = '100';
+        DOM.profileBadgeState.textContent = 'FINISHED';
+        DOM.profileBadgeState.className = 'profile-badge-state';
+        DOM.countdownBanner.classList.add('hidden');
       } else if (status === STATES.PAUSED) {
         DOM.profileName.textContent = 'Session Paused';
-        DOM.profileHeadline.textContent = 'Click Resume to continue automated loop.';
-        DOM.profileStatus.textContent = 'STATUS: PAUSED';
+        DOM.profileHeadline.textContent = 'Click Resume to continue scanning for qualified profiles.';
+        DOM.profileInitials.textContent = 'II';
+        DOM.profileBadgeState.textContent = 'PAUSED';
+        DOM.profileBadgeState.className = 'profile-badge-state';
+        DOM.countdownBanner.classList.add('hidden');
       } else {
         DOM.profileName.textContent = 'No Profile Active';
-        DOM.profileHeadline.textContent = 'Start session on LinkedIn to begin automated loop.';
-        DOM.profileStatus.textContent = 'STATUS: IDLE';
+        DOM.profileHeadline.textContent = 'Start session on LinkedIn to begin scanning.';
+        DOM.profileInitials.textContent = 'CF';
+        DOM.profileBadgeState.textContent = 'IDLE';
+        DOM.profileBadgeState.className = 'profile-badge-state';
+        DOM.profileMutualsText.textContent = 'Mutual filter active (≥1)';
+        DOM.countdownBanner.classList.add('hidden');
       }
     }
   }
@@ -306,16 +382,16 @@
 
     DOM.activityList.innerHTML = '';
 
-    feed.slice(0, 30).forEach(item => {
+    feed.slice(0, 40).forEach(item => {
       const row = document.createElement('div');
-      row.className = 'activity-item';
+      row.className = 'act-row';
 
       const time = document.createElement('span');
-      time.className = 'activity-time';
+      time.className = 'act-time';
       time.textContent = item.time || '--:--:--';
 
       const msg = document.createElement('span');
-      msg.className = 'activity-msg';
+      msg.className = 'act-msg';
       msg.textContent = item.message || '';
 
       row.appendChild(time);
@@ -325,8 +401,14 @@
   }
 
   function renderDiagnostics() {
+    const diag = currentState.diagnostics || {};
+    if (DOM.diagCardsDetected) DOM.diagCardsDetected.textContent = diag.profileCardsDetected || 0;
+    if (DOM.diagButtonsFound) DOM.diagButtonsFound.textContent = diag.connectButtonsDetected || 0;
+    if (DOM.diagWithMutuals) DOM.diagWithMutuals.textContent = diag.profilesWithMutuals || 0;
+    if (DOM.diagWithoutMutuals) DOM.diagWithoutMutuals.textContent = diag.profilesWithoutMutuals || 0;
+    if (DOM.diagProcessedCount) DOM.diagProcessedCount.textContent = diag.alreadyProcessed || 0;
     if (DOM.diagState) DOM.diagState.textContent = currentState.status || 'IDLE';
-    if (DOM.diagOpId) DOM.diagOpId.textContent = currentState.sessionRunId || '--';
+    if (DOM.diagOpId) DOM.diagOpId.textContent = currentState.sessionRunId ? currentState.sessionRunId.slice(-8) : '--';
   }
 
   function renderControls() {
@@ -334,11 +416,11 @@
 
     const isActive = (
       status === STATES.SCANNING ||
-      status === STATES.PROFILE_FOUND ||
+      status === STATES.WAITING_FOR_CONFIRMATION ||
+      status === STATES.PROFILE_READY ||
       status === STATES.PROCESSING ||
       status === STATES.VERIFYING ||
-      status === STATES.WAITING_DELAY ||
-      status === STATES.TIMEOUT
+      status === STATES.DELAYING
     );
 
     if (isActive) {

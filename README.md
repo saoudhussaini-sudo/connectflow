@@ -1,7 +1,7 @@
-# ⚡ ConnectFlow — LinkedIn Connection Assistant
+# ⚡ ConnectFlow — LinkedIn Connection Assistant (Apple / Product Style)
 
-> **Minimalist, High-Performance Chrome Extension (Manifest V3)**
-> Designed in the clean monochrome utility aesthetic (Linear / Raycast / Apple Utility) with an automated 5-second connection dispatch loop, global watchdog protection, and a strict 100-request safety ceiling.
+> **High-Performance Chrome Extension (Manifest V3)**
+> Features an intelligent **Mutual Connection Filter (≥ 1 required)**, **User-Confirmed Dispatch Action**, **Exact 5-Second Cooldown**, **Global Watchdog Protection**, and an **Apple Product Design System**.
 
 [![Live Web Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-black?style=for-the-badge&logo=github)](https://saoudhussaini-sudo.github.io/connectflow/)
 [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-white?style=for-the-badge&logo=googlechrome)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -10,60 +10,48 @@
 
 ## 🌐 Live Web Demo
 
-Experience the interactive ConnectFlow simulator directly in your browser:  
+Experience the interactive Apple-style ConnectFlow simulator directly in your browser:  
 👉 **[https://saoudhussaini-sudo.github.io/connectflow/](https://saoudhussaini-sudo.github.io/connectflow/)**
 
 ---
 
-## 🖤 Design System & Visual Identity
+## 🛡️ Qualification Pipeline (≥ 1 Mutual Connection)
 
-* **Monochrome Utility**: Pure black background (`#000000`), crisp white text (`#ffffff`), muted secondary labels (`#666666`), thin 1px dividers (`#1a1a1a`), and solid white/black buttons.
-* **No Clutter**: Zero gradients, neon accents, purple/blue glows, or decorative animations.
-* **Streamlined Visual Hierarchy**:
-  * `CONNECTFLOW` title & status indicator (`READY`, `SCANNING`, `PROCESSING`, `VERIFYING`, `WAITING (5s)`, `PAUSED`, `STOPPED`, `COMPLETE`).
-  * `REQUESTS`: Prominent session counter `37 / 100` and `63 remaining` with a 3px monochrome progress bar.
-  * `SENT`, `SKIPPED`, `ERRORS` three-column statistics separated by thin lines.
-  * `CURRENT PROFILE`: Minimal profile details with real-time phase updates.
-  * `ACTIVITY LOG`: Compact timeline with timestamps (`HH:MM:SS`).
-  * `[ START AUTOMATED LOOP (5s) ]`, `[ PAUSE ]`, `[ STOP ]` controls.
-
----
-
-## ⚡ Automated 5-Second Continuous Loop
-
-The discovery and connection workflow runs automatically in a continuous 5-second sequence:
+A profile is eligible **ONLY** when:
+1. A genuine **Connect** action is available (not *Follow*, *Pending*, or *Message*).
+2. The candidate has **at least 1 mutual connection** with the user (e.g. *"4 mutual connections"*, *"1 mutual connection"*).
 
 ```
-[ START AUTOMATED LOOP (5s) ]
-            ↓
-  Auto-detect next eligible profile
-            ↓
-  Highlight & scroll into view
-            ↓
-  Send connection request automatically
-            ↓
-  Auto-dismiss "Send without note" modal
-            ↓
-  Verify invitation dispatched
-            ↓
-  Increment counter (e.g. 37 → 38 / 100)
-            ↓
-  Wait 5 seconds (5,000ms delay)
-            ↓
-  Auto-scan & send next profile
-            ↓
-  Repeat until 100 / 100 → Auto Stop
+SCAN PAGE
+   ↓
+DETECT PROFILE CARD
+   ↓
+CHECK BUTTON STATE (Connect vs Follow / Pending / Message)
+   ↓
+CHECK MUTUAL CONNECTIONS (getMutualConnectionCount)
+   ↓
+IF mutualConnections >= 1
+   → QUALIFIED (PROFILE READY)
+   → Highlight card & Present candidate in popup
+   → User clicks [ SEND REQUEST ]
+   → Verified sent → sentCount++
+   → Exact 5-Second Cooldown (5... 4... 3... 2... 1...)
+   → Scan next qualified profile
+ELSE (0 mutuals or unknown)
+   → SKIP (Log: "Rahul Sharma skipped — 0 mutual connections")
+   → Automatically evaluate next candidate
 ```
 
 ---
 
-## 🛡️ Watchdog & Anti-Hang Protection
+## 🍎 Apple Product Design System
 
-* **Step Timeouts**: Every asynchronous operation has guaranteed bounded execution (`CLICK`: 4s, `MODAL`: 3.5s, `VERIFY`: 5s, `GLOBAL WATCHDOG`: 20s).
-* **Self-Healing Recovery**: If LinkedIn DOM changes or verification fails, the operation automatically aborts, logs to activity feed, increments errors, and recovers without freezing.
-* **Zero Count on Failure**: Timeouts and failed attempts **never increment `sentCount`**.
-* **Deduplication**: Maintains a session-level `Set` of profile handles and URNs to prevent duplicate processing.
-* **Race Condition Shielding**: Unique `sessionRunId` and `operationId` tokens ensure stale callbacks never corrupt state.
+* **Dark Mode Titanium Aesthetic**: Translucent frosted glass layers (`rgba(22, 26, 36, 0.75)` with `backdrop-filter: blur(20px)`), 1px border glows, and tactile Apple buttons.
+* **Live Confirmation Card**: Monogram initials avatar, candidate name, occupation headline, and green pill badge (`● 4 mutual connections`).
+* **Visual Metric Cards**: Prominent `37 / 100` session counter with progress bar, `MUTUAL FILTER: ≥ 1`, and `EXACT DELAY: 5s`.
+* **5-Second Countdown Cooldown**: Clean live countdown banner with progress spinner between dispatches.
+* **Detailed Activity Timeline**: Real-time timestamps (`HH:MM:SS`) recording qualification decisions and dispatches.
+* **Diagnostic Panel**: Live metrics showing profile cards detected, connect buttons found, profiles with/without mutuals, and active session ID.
 
 ---
 
@@ -73,23 +61,22 @@ The discovery and connection workflow runs automatically in a continuous 5-secon
 connectflow/
 ├── manifest.json              # Chrome MV3 manifest
 ├── shared/
-│   ├── constants.js           # Action types, states, timeouts, MAX_REQUESTS = 100
-│   └── session-state.js       # Atomic state manager & chrome.storage sync
+│   ├── constants.js           # Action types, states, MIN_MUTUAL_CONNECTIONS = 1, MAX_REQUESTS = 100
+│   └── session-state.js       # Atomic state manager & countdown controller
 ├── background/
-│   └── service-worker.js      # Minimalist message router & badge updater
+│   └── service-worker.js      # Message router & badge updater
 ├── content/
-│   ├── linkedin-detector.js   # Resilient DOM scanner & deduplication key extractor
-│   ├── linkedin.js            # Watchdog-protected orchestrator with 5s loop
-│   └── content.css            # Crisp monochrome target outline & badge
+│   ├── linkedin-detector.js   # Robust DOM scanner, mutuals extractor & button classifier
+│   ├── linkedin.js            # Qualification orchestrator, user-confirmed dispatch & 5s cooldown
+│   └── content.css            # Apple-style spotlight target outline & qualified badge
 ├── popup/
-│   ├── popup.html             # Clean monochrome dashboard layout
-│   ├── popup.css              # Apple / Linear style black & white styling
-│   └── popup.js               # State subscriber, real-time UI rendering & controls
+│   ├── popup.html             # Apple product style dashboard layout
+│   ├── popup.css              # Obsidian & titanium frosted glass styling
+│   └── popup.js               # State subscriber, live countdown & confirmation handler
 ├── assets/
-│   └── icons/                 # 16, 32, 48, 128 px monochrome icons
+│   └── icons/                 # 16, 32, 48, 128 px icons
 ├── index.html                 # GitHub Pages interactive web showcase
-├── generate-icons.js          # Procedural PNG icon generator
-├── test-integrity.js          # Automated verification test suite
+├── test-integrity.js          # 10-case automated qualification & state test suite
 └── README.md
 ```
 
@@ -106,17 +93,18 @@ git clone https://github.com/saoudhussaini-sudo/connectflow.git
 3. Click **Load unpacked** and select the `connectflow/` folder.
 
 ### 2. Run on LinkedIn
-1. Open [LinkedIn People Search](https://www.linkedin.com/search/results/people/) or [My Network](https://www.linkedin.com/mynetwork/).
+1. Open [LinkedIn My Network](https://www.linkedin.com/mynetwork/) or [People Search](https://www.linkedin.com/search/results/people/).
 2. Click the **ConnectFlow** icon in the toolbar.
-3. Click **START AUTOMATED LOOP (5s)**.
-4. Watch ConnectFlow automatically detect profiles, dispatch invitations every 5 seconds, and progress up to the 100 limit.
-5. Click **STOP** or **PAUSE** anytime for instant control.
+3. Click **START QUALIFIED SCAN**.
+4. ConnectFlow will automatically find the first candidate with **≥ 1 mutual connection** and present them in the popup.
+5. Click **SEND REQUEST** (or **SKIP**).
+6. After verified dispatch, ConnectFlow enters an exact **5-second countdown cooldown** before finding the next qualified candidate.
 
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Automated Test Suite
 
-Run the built-in test suite:
+Run the built-in 10-case qualification test suite:
 ```bash
 node test-integrity.js
 ```

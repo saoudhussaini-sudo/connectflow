@@ -26,7 +26,10 @@ function updateBadge(state) {
   if (status === STATES.LIMIT_REACHED) {
     chrome.action.setBadgeText({ text: '100' });
     chrome.action.setBadgeBackgroundColor({ color: '#222222' });
-  } else if (status === STATES.SCANNING || status === STATES.PROCESSING || status === STATES.VERIFYING || status === STATES.WAITING_DELAY) {
+  } else if (status === STATES.WAITING_FOR_CONFIRMATION) {
+    chrome.action.setBadgeText({ text: 'READY' });
+    chrome.action.setBadgeBackgroundColor({ color: '#2e7d32' });
+  } else if (status === STATES.SCANNING || status === STATES.PROCESSING || status === STATES.VERIFYING || status === STATES.DELAYING) {
     chrome.action.setBadgeText({ text: `${count}` });
     chrome.action.setBadgeBackgroundColor({ color: '#333333' });
   } else if (status === STATES.PAUSED) {
@@ -116,6 +119,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
 
+      case MESSAGE_TYPES.CONFIRM_SEND_REQUEST: {
+        const tab = await getActiveLinkedInTab();
+        if (tab && tab.id) {
+          await sendMessageToContentScript(tab.id, {
+            type: MESSAGE_TYPES.CONFIRM_SEND_REQUEST,
+            payload
+          });
+        }
+        sendResponse({ success: true, state: stateManager.getState() });
+        break;
+      }
+
+      case MESSAGE_TYPES.SKIP_CURRENT_PROFILE: {
+        const tab = await getActiveLinkedInTab();
+        if (tab && tab.id) {
+          await sendMessageToContentScript(tab.id, {
+            type: MESSAGE_TYPES.SKIP_CURRENT_PROFILE,
+            payload
+          });
+        }
+        sendResponse({ success: true, state: stateManager.getState() });
+        break;
+      }
+
       case MESSAGE_TYPES.PAUSE_SESSION: {
         const newState = await stateManager.pauseSession();
         const tab = await getActiveLinkedInTab();
@@ -166,8 +193,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
 
-      case MESSAGE_TYPES.PROFILE_DETECTED: {
-        const newState = await stateManager.setDetectedProfile(payload?.profile || {});
+      case MESSAGE_TYPES.PROFILE_QUALIFIED: {
+        const newState = await stateManager.setQualifiedProfile(payload?.profile || {});
+        sendResponse({ success: true, state: newState });
+        break;
+      }
+
+      case MESSAGE_TYPES.PROFILE_DISQUALIFIED: {
+        const newState = await stateManager.setSkippedProfile(payload?.profile, payload?.reason);
         sendResponse({ success: true, state: newState });
         break;
       }
@@ -198,6 +231,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
 
+      case MESSAGE_TYPES.COUNTDOWN_TICK: {
+        const newState = await stateManager.updateCountdown(payload?.seconds || 0);
+        sendResponse({ success: true, state: newState });
+        break;
+      }
+
+      case MESSAGE_TYPES.UPDATE_DIAGNOSTICS: {
+        await stateManager.updateDiagnostics(payload?.diagnostics);
+        sendResponse({ success: true, state: stateManager.getState() });
+        break;
+      }
+
       case MESSAGE_TYPES.REQUEST_TIMEOUT: {
         const newState = await stateManager.recordTimeout(payload?.stage || 'Unknown stage', payload?.profile);
         sendResponse({ success: true, state: newState });
@@ -206,21 +251,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case MESSAGE_TYPES.REQUEST_FAILED: {
         const newState = await stateManager.recordError(payload?.error || 'Verification failed', payload?.profile);
-        sendResponse({ success: true, state: newState });
-        break;
-      }
-
-      case MESSAGE_TYPES.PROFILE_SKIPPED: {
-        const newState = await stateManager.recordSkipped(payload?.reason || 'Skipped', payload?.profile);
-        sendResponse({ success: true, state: newState });
-        break;
-      }
-
-      case MESSAGE_TYPES.WAITING_NEXT_CYCLE: {
-        const newState = await stateManager.transitionTo(
-          STATES.WAITING_DELAY,
-          `Waiting ${payload?.remainingSeconds || 10}s before next request (${stateManager.state.sentCount}/${MAX_REQUESTS})...`
-        );
         sendResponse({ success: true, state: newState });
         break;
       }

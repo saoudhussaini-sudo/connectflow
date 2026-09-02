@@ -1,6 +1,6 @@
 /**
  * ConnectFlow - Shared Constants
- * Strict State Machine, Timeouts & Watchdog Configurations
+ * Strict State Machine, Timeouts & Mutual Connection Filter Config
  */
 
 (function (root, factory) {
@@ -15,17 +15,20 @@
   // Hard Session Ceiling
   const MAX_REQUESTS = 100;
 
-  // Automated Loop Delay (5 seconds between requests)
-  const LOOP_INTERVAL_MS = 5000;
+  // Exact 5-Second Delay between user-confirmed requests
+  const REQUEST_DELAY_MS = 5000;
+
+  // Minimum required mutual connections to qualify
+  const MIN_MUTUAL_CONNECTIONS = 1;
 
   // Watchdog & Asynchronous Timeouts (ms)
   const TIMEOUTS = {
-    GLOBAL_STEP_WATCHDOG: 20000,   // 20s max for any single profile cycle
-    SCAN_TIMEOUT: 10000,           // 10s scan timeout before scrolling/retrying
-    CLICK_ACTION_TIMEOUT: 4000,    // 4s to trigger click & verify interaction
-    MODAL_HANDLER_TIMEOUT: 3500,   // 3.5s max to detect & dismiss note dialog
-    VERIFICATION_TIMEOUT: 5000,    // 5s max to verify 'Pending' status
-    MESSAGE_RESPONSE_TIMEOUT: 4000 // 4s timeout on runtime messages
+    GLOBAL_STEP_WATCHDOG: 20000,
+    SCAN_TIMEOUT: 10000,
+    CLICK_ACTION_TIMEOUT: 4000,
+    MODAL_HANDLER_TIMEOUT: 3500,
+    VERIFICATION_TIMEOUT: 5000,
+    MESSAGE_RESPONSE_TIMEOUT: 4000
   };
 
   // Authoritative State Machine States
@@ -33,17 +36,18 @@
     IDLE: 'IDLE',
     SCANNING: 'SCANNING',
     PROFILE_FOUND: 'PROFILE_FOUND',
-    PREPARING: 'PREPARING',
+    QUALIFYING: 'QUALIFYING',
+    PROFILE_READY: 'PROFILE_READY',
+    WAITING_FOR_CONFIRMATION: 'WAITING_FOR_CONFIRMATION',
     PROCESSING: 'PROCESSING',
     VERIFYING: 'VERIFYING',
-    WAITING_DELAY: 'WAITING_DELAY',
-    COMPLETED_STEP: 'COMPLETED_STEP',
+    REQUEST_SENT: 'REQUEST_SENT',
+    DELAYING: 'DELAYING',
     SKIPPED: 'SKIPPED',
-    TIMEOUT: 'TIMEOUT',
-    ERROR: 'ERROR',
     PAUSED: 'PAUSED',
     STOPPED: 'STOPPED',
-    LIMIT_REACHED: 'LIMIT_REACHED'
+    LIMIT_REACHED: 'LIMIT_REACHED',
+    ERROR: 'ERROR'
   };
 
   // Message Types across Extension Components
@@ -56,42 +60,44 @@
     GET_SESSION_STATE: 'GET_SESSION_STATE',
     UPDATE_SESSION_STATE: 'UPDATE_SESSION_STATE',
 
+    // User-Confirmed Action
+    CONFIRM_SEND_REQUEST: 'CONFIRM_SEND_REQUEST',
+    SKIP_CURRENT_PROFILE: 'SKIP_CURRENT_PROFILE',
+
     // Content Script -> Background Events
     STATE_TRANSITION: 'STATE_TRANSITION',
-    PROFILE_DETECTED: 'PROFILE_DETECTED',
+    PROFILE_QUALIFIED: 'PROFILE_QUALIFIED',
+    PROFILE_DISQUALIFIED: 'PROFILE_DISQUALIFIED',
     REQUEST_PROCESSING: 'REQUEST_PROCESSING',
     REQUEST_VERIFYING: 'REQUEST_VERIFYING',
     REQUEST_VERIFIED: 'REQUEST_VERIFIED',
+    COUNTDOWN_TICK: 'COUNTDOWN_TICK',
     REQUEST_TIMEOUT: 'REQUEST_TIMEOUT',
     REQUEST_FAILED: 'REQUEST_FAILED',
-    PROFILE_SKIPPED: 'PROFILE_SKIPPED',
-    WAITING_NEXT_CYCLE: 'WAITING_NEXT_CYCLE',
 
     ACTIVITY_LOG: 'ACTIVITY_LOG',
+    UPDATE_DIAGNOSTICS: 'UPDATE_DIAGNOSTICS',
     PING: 'PING'
-  };
-
-  const PROFILE_STATUS = {
-    CONNECT_AVAILABLE: 'CONNECT_AVAILABLE',
-    PENDING: 'PENDING',
-    MESSAGE: 'MESSAGE',
-    FOLLOW: 'FOLLOW',
-    FOLLOWING: 'FOLLOWING',
-    CONNECTED: 'CONNECTED',
-    UNKNOWN: 'UNKNOWN'
   };
 
   const DEFAULT_STATE = {
     status: STATES.IDLE,
-    statusDetail: 'Ready to start automated loop.',
+    statusDetail: 'Ready to start.',
     sentCount: 0,
     skippedCount: 0,
     errorCount: 0,
     maxRequests: MAX_REQUESTS,
     currentProfile: null,
+    countdownSeconds: 0,
     activityFeed: [],
     sessionRunId: null,
-    nextCycleTime: null,
+    diagnostics: {
+      profileCardsDetected: 0,
+      connectButtonsDetected: 0,
+      profilesWithMutuals: 0,
+      profilesWithoutMutuals: 0,
+      alreadyProcessed: 0
+    },
     errorMessage: null,
     sessionStartTime: null,
     sessionEndTime: null
@@ -99,17 +105,18 @@
 
   const DEFAULT_SETTINGS = {
     maxRequests: MAX_REQUESTS,
-    loopIntervalMs: LOOP_INTERVAL_MS,
+    requestDelayMs: REQUEST_DELAY_MS,
+    minMutualConnections: MIN_MUTUAL_CONNECTIONS,
     debugMode: true
   };
 
   return {
     MAX_REQUESTS,
-    LOOP_INTERVAL_MS,
+    REQUEST_DELAY_MS,
+    MIN_MUTUAL_CONNECTIONS,
     TIMEOUTS,
     STATES,
     MESSAGE_TYPES,
-    PROFILE_STATUS,
     DEFAULT_STATE,
     DEFAULT_SETTINGS
   };

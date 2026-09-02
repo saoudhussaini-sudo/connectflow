@@ -1,7 +1,7 @@
 /**
  * ConnectFlow - Session State Manager
- * Authoritative state machine with transition validation, atomic counters,
- * activity logging, and watchdog timeout handling.
+ * Authoritative state machine for mutual-connection qualification,
+ * live countdown timer, and user-confirmed dispatch actions.
  */
 
 (function (root, factory) {
@@ -17,7 +17,7 @@
 
   class SessionStateManager {
     constructor() {
-      this.state = { ...DEFAULT_STATE, activityFeed: [] };
+      this.state = { ...DEFAULT_STATE, activityFeed: [], diagnostics: { ...DEFAULT_STATE.diagnostics } };
       this.settings = { ...DEFAULT_SETTINGS };
       this.listeners = [];
       this.initialized = false;
@@ -133,75 +133,36 @@
 
       this.state.sessionRunId = 'run_' + Date.now();
       this.state.status = STATES.SCANNING;
-      this.state.statusDetail = 'Scanning for eligible profiles on page...';
+      this.state.statusDetail = 'Scanning for qualified profiles (≥1 mutual connection)...';
       if (!this.state.sessionStartTime) {
         this.state.sessionStartTime = Date.now();
       }
       this.state.errorMessage = null;
-      this.logActivity('Automated 5s session started.', 'info');
+      this.state.countdownSeconds = 0;
+      this.logActivity('Session started. Scanning with ≥1 mutual connection filter.', 'info');
       await this.persist();
       this.notify();
       return this.getState();
     }
 
-    async pauseSession() {
-      this.state.status = STATES.PAUSED;
-      this.state.statusDetail = 'Session paused by user.';
-      this.logActivity('Session paused.', 'warning');
-      await this.persist();
-      this.notify();
-      return this.getState();
-    }
-
-    async resumeSession() {
-      if (this.state.sentCount >= MAX_REQUESTS) {
-        this.state.status = STATES.LIMIT_REACHED;
-        this.state.statusDetail = 'Session limit reached (100/100).';
-        await this.persist();
-        this.notify();
-        return this.getState();
-      }
-
-      this.state.status = STATES.SCANNING;
-      this.state.statusDetail = 'Resumed. Scanning for profiles...';
-      this.logActivity('Session resumed.', 'info');
-      await this.persist();
-      this.notify();
-      return this.getState();
-    }
-
-    async stopSession() {
-      this.state.status = STATES.STOPPED;
-      this.state.statusDetail = 'Session stopped.';
-      this.state.currentProfile = null;
-      this.state.sessionRunId = null;
-      this.state.sessionEndTime = Date.now();
-      this.logActivity('Session stopped.', 'warning');
-      await this.persist();
-      this.notify();
-      return this.getState();
-    }
-
-    async resetSession() {
-      this.state = {
-        ...DEFAULT_STATE,
-        activityFeed: []
-      };
-      this.logActivity('Session reset. Ready to start.', 'info');
-      await this.persist();
-      this.notify();
-      return this.getState();
-    }
-
-    async setDetectedProfile(profile) {
-      if (this.state.status !== STATES.SCANNING && this.state.status !== STATES.WAITING_DELAY) {
-        return this.getState();
-      }
-
+    async setQualifiedProfile(profile) {
       this.state.currentProfile = profile;
-      this.state.status = STATES.PROFILE_FOUND;
-      this.state.statusDetail = `Profile found: ${profile.name || 'LinkedIn Member'}`;
-      this.logActivity(`Profile detected: ${profile.name || 'Candidate'}`, 'info');
+      this.state.status = STATES.WAITING_FOR_CONFIRMATION;
+      const count = profile.mutualConnections || 1;
+      this.state.statusDetail = `Qualified: ${profile.name} (${count} mutual connection${count > 1 ? 's' : ''})`;
+      
+      this.logActivity(`${profile.name} qualified — ${count} mutual connection${count > 1 ? 's' : ''}`, 'success');
+      this.logActivity(`Waiting for user confirmation for ${profile.name}`, 'info');
+
+      await this.persist();
+      this.notify();
+      return this.getState();
+    }
+
+    async setSkippedProfile(profile, reason = '0 mutual connections') {
+      this.state.skippedCount += 1;
+      const name = profile?.name || 'Profile';
+      this.logActivity(`${name} skipped — ${reason}`, 'info');
       await this.persist();
       this.notify();
       return this.getState();
@@ -220,19 +181,98 @@
       const current = this.state.sentCount;
       const name = profile?.name || this.state.currentProfile?.name || 'Candidate';
       
-      this.logActivity(`Request sent to ${name} (${current}/${MAX_REQUESTS})`, 'success');
+      this.logActivity(`Request sent — ${current}/${MAX_REQUESTS} (${name})`, 'success');
       this.state.currentProfile = null;
 
       if (this.state.sentCount >= MAX_REQUESTS) {
         this.state.status = STATES.LIMIT_REACHED;
         this.state.statusDetail = '100 connection requests sent. Limit reached.';
         this.state.sessionEndTime = Date.now();
-        this.logActivity('Session limit reached (100/100). Automated loop finished.', 'limit');
+        this.logActivity('Session limit reached (100/100). All actions stopped.', 'limit');
       } else {
-        this.state.status = STATES.WAITING_DELAY;
-        this.state.statusDetail = `Waiting 5s before next request (${current}/${MAX_REQUESTS})...`;
+        this.state.status = STATES.DELAYING;
+        this.state.countdownSeconds = 5;
+        this.state.statusDetail = `5-second cooldown before next scan (${current}/${MAX_REQUESTS})...`;
+        this.logActivity('5-second delay started.', 'info');
       }
 
+      await this.persist();
+      this.notify();
+      return this.getState();
+    }
+
+    async updateCountdown(seconds) {
+      this.state.countdownSeconds = seconds;
+      if (seconds > 0) {
+        this.state.status = STATES.DELAYING;
+        this.state.statusDetail = `Next scan in ${seconds}s...`;
+      } else if (this.state.status === STATES.DELAYING) {
+        this.state.status = STATES.SCANNING;
+        this.state.statusDetail = 'Scanning for next qualified profile...';
+        this.logActivity('Scanning for next qualified profile', 'info');
+      }
+      await this.persist();
+      this.notify();
+      return this.getState();
+    }
+
+    async updateDiagnostics(diagData) {
+      if (!diagData) return;
+      this.state.diagnostics = {
+        ...this.state.diagnostics,
+        ...diagData
+      };
+      await this.persist();
+      this.notify();
+    }
+
+    async pauseSession() {
+      this.state.status = STATES.PAUSED;
+      this.state.statusDetail = 'Session paused by user.';
+      this.state.countdownSeconds = 0;
+      this.logActivity('Session paused.', 'warning');
+      await this.persist();
+      this.notify();
+      return this.getState();
+    }
+
+    async resumeSession() {
+      if (this.state.sentCount >= MAX_REQUESTS) {
+        this.state.status = STATES.LIMIT_REACHED;
+        this.state.statusDetail = 'Session limit reached (100/100).';
+        await this.persist();
+        this.notify();
+        return this.getState();
+      }
+
+      this.state.status = STATES.SCANNING;
+      this.state.statusDetail = 'Resumed. Scanning for qualified profiles...';
+      this.logActivity('Session resumed.', 'info');
+      await this.persist();
+      this.notify();
+      return this.getState();
+    }
+
+    async stopSession() {
+      this.state.status = STATES.STOPPED;
+      this.state.statusDetail = 'Session stopped.';
+      this.state.currentProfile = null;
+      this.state.sessionRunId = null;
+      this.state.countdownSeconds = 0;
+      this.state.sessionEndTime = Date.now();
+      this.logActivity('Session stopped.', 'warning');
+      await this.persist();
+      this.notify();
+      return this.getState();
+    }
+
+    async resetSession() {
+      this.state = {
+        ...DEFAULT_STATE,
+        activityFeed: [],
+        diagnostics: { ...DEFAULT_STATE.diagnostics }
+      };
+      this.logActivity('Session reset. Ready to start.', 'info');
       await this.persist();
       this.notify();
       return this.getState();
@@ -241,10 +281,10 @@
     async recordTimeout(stage, profile) {
       this.state.errorCount += 1;
       const name = profile?.name || this.state.currentProfile?.name || 'Profile';
-      this.state.status = STATES.TIMEOUT;
+      this.state.status = STATES.ERROR;
       this.state.statusDetail = `Operation timed out (${stage}) on ${name}.`;
       this.state.errorMessage = `Timeout at stage: ${stage}`;
-      this.logActivity(`Action timed out on ${name} (${stage}). Request not counted. Recovering...`, 'warning');
+      this.logActivity(`Action timed out on ${name} (${stage}). Request not counted.`, 'warning');
       this.state.currentProfile = null;
       await this.persist();
       this.notify();
@@ -258,18 +298,6 @@
       this.state.statusDetail = `Error: ${errorMessage}`;
       this.state.errorMessage = errorMessage;
       this.logActivity(`Error on ${name}: ${errorMessage}. Request not counted.`, 'error');
-      this.state.currentProfile = null;
-      await this.persist();
-      this.notify();
-      return this.getState();
-    }
-
-    async recordSkipped(reason = 'Skipped', profile) {
-      this.state.skippedCount += 1;
-      const name = profile?.name || this.state.currentProfile?.name || 'Profile';
-      this.state.status = STATES.SKIPPED;
-      this.state.statusDetail = `Skipped: ${name} (${reason})`;
-      this.logActivity(`Skipped ${name} (${reason})`, 'info');
       this.state.currentProfile = null;
       await this.persist();
       this.notify();

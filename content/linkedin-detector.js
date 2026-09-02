@@ -1,7 +1,7 @@
 /**
- * ConnectFlow - LinkedIn DOM Detection Module
- * Resilient multi-strategy Connect button discovery, robust visibility checks,
- * comprehensive text normalization, and reliable profile card association.
+ * ConnectFlow - LinkedIn DOM Detection & Mutual Connection Qualification Module
+ * Resilient multi-strategy Connect button discovery, robust mutual connection parser,
+ * and strict profile qualification pipeline.
  */
 
 (function (root, factory) {
@@ -16,14 +16,13 @@
   let profileCounter = 0;
 
   /**
-   * Robust element visibility check
+   * Universal DOM element visibility check
    */
   function isVisible(element) {
     if (!element || (element.nodeType !== 1 && !(typeof Element !== 'undefined' && element instanceof Element))) {
       return false;
     }
 
-    // Check inline or computed styles
     try {
       if (typeof window !== 'undefined' && window.getComputedStyle) {
         const style = window.getComputedStyle(element);
@@ -33,7 +32,6 @@
       }
     } catch (e) {}
 
-    // Bounding rectangle check
     try {
       if (typeof element.getBoundingClientRect === 'function') {
         const rect = element.getBoundingClientRect();
@@ -47,7 +45,7 @@
   }
 
   /**
-   * Normalizes text by removing non-alphanumeric noise, lowercasing, and collapsing whitespace
+   * Normalizes text by removing extra spaces, newlines, and lowercasing
    */
   function normalizeText(text) {
     if (!text) return '';
@@ -58,7 +56,91 @@
   }
 
   /**
-   * Classifies any DOM button or clickable element into Connect / Pending / Message / Follow
+   * Inspects rendered profile card for visible mutual connection count.
+   * Returns:
+   *   - positive integer (e.g. 1, 5, 12)
+   *   - 0 (explicitly 0 or no mutuals)
+   *   - null (if mutual info cannot be confidently detected — UNKNOWN = NOT QUALIFIED)
+   */
+  function getMutualConnectionCount(profileCard) {
+    if (!profileCard || profileCard.nodeType !== 1) return null;
+
+    // Search common containers for mutuals
+    const mutualSelectors = [
+      '.discover-person-card__mutual-connections',
+      '.mn-discovery-person-card__mutual-connections',
+      '.entity-result__simple-insight',
+      '.entity-result__insight-text',
+      '.entity-result__insights',
+      '.member-insights',
+      'span.text-body-xsmall',
+      'div[class*="mutual"]',
+      'span[class*="mutual"]',
+      'p[class*="mutual"]'
+    ];
+
+    let fullCardText = normalizeText(profileCard.textContent || '');
+
+    // Check specific selectors first
+    for (const sel of mutualSelectors) {
+      try {
+        const els = profileCard.querySelectorAll(sel);
+        for (const el of els) {
+          const t = normalizeText(el.textContent || '');
+          const count = parseMutualNumber(t);
+          if (count !== null) return count;
+        }
+      } catch (e) {}
+    }
+
+    // Fallback: parse entire card text
+    return parseMutualNumber(fullCardText);
+  }
+
+  /**
+   * Helper to parse integer count from text snippet
+   */
+  function parseMutualNumber(text) {
+    if (!text) return null;
+
+    // Explicit 0 / no mutuals
+    if (text.includes('no mutual connection') || text.includes('0 mutual connection')) {
+      return 0;
+    }
+
+    // Pattern 1: "X and 12 other mutual connections" -> 12 + 1 = 13 or at least 12
+    const otherMatch = text.match(/(?:and\s+)?(\d+)\s+other\s+mutual\s+connections?/i);
+    if (otherMatch && otherMatch[1]) {
+      const num = parseInt(otherMatch[1], 10);
+      return !isNaN(num) ? num + 1 : null;
+    }
+
+    // Pattern 2: "1 mutual connection", "5 mutual connections"
+    const match = text.match(/(\d+)\s+mutual\s+connections?/i);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      return !isNaN(num) ? num : null;
+    }
+
+    // Pattern 3: "3 mutuals", "1 mutual"
+    const shortMatch = text.match(/(\d+)\s+mutuals?(?:\s|$|\.|\,)/i);
+    if (shortMatch && shortMatch[1]) {
+      const num = parseInt(shortMatch[1], 10);
+      return !isNaN(num) ? num : null;
+    }
+
+    // Pattern 4: "1 connection in common", "4 connections in common"
+    const commonMatch = text.match(/(\d+)\s+connections?\s+in\s+common/i);
+    if (commonMatch && commonMatch[1]) {
+      const num = parseInt(commonMatch[1], 10);
+      return !isNaN(num) ? num : null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Classifies a DOM button into Connect / Pending / Message / Follow
    */
   function classifyButton(button) {
     if (!button || button.disabled) {
@@ -95,7 +177,7 @@
       return { status: 'MESSAGE', isEligible: false };
     }
 
-    // 3. Following / Follow checks (only if not an invite/connect)
+    // 3. Following / Follow checks
     if (combined.includes('following') && !combined.includes('connect')) {
       return { status: 'FOLLOWING', isEligible: false };
     }
@@ -105,21 +187,18 @@
     }
 
     // 4. Genuine Connect Action Checks
-    // A. Plain "connect"
     const hasPlainConnect = 
       textContent === 'connect' || 
       innerSpans.split(' ').some(w => w === 'connect') ||
       textContent.split('\n').some(line => normalizeText(line) === 'connect');
 
-    // B. "Invite ... to connect"
     const hasInviteConnect = 
-      ariaLabel.includes('invite') && ariaLabel.includes('connect') ||
+      (ariaLabel.includes('invite') && ariaLabel.includes('connect')) ||
       ariaLabel.startsWith('invite ') ||
       ariaLabel.startsWith('connect with') ||
       ariaLabel.includes('connect with') ||
       ariaLabel.endsWith('to connect');
 
-    // C. Text contains "connect" without "remove connection" or "message"
     const hasConnectKeyword = 
       (textContent.includes('connect') || ariaLabel.includes('connect')) && 
       !combined.includes('remove connection') &&
@@ -165,15 +244,14 @@
   }
 
   /**
-   * Extracts profile metadata (Name, Headline, URL, Unique Key)
+   * Extracts profile metadata (Name, Headline, URL, Unique Key, Mutuals)
    */
   function extractProfileMetadata(card, button) {
     let name = '';
     let headline = 'Professional on LinkedIn';
-    let avatarUrl = '';
     let profileKey = '';
 
-    // 1. Try extracting name from button aria-label: "Invite Alex Johnson to connect"
+    // 1. Try extracting name from button aria-label
     if (button && button.getAttribute('aria-label')) {
       const aria = button.getAttribute('aria-label');
       const match = 
@@ -248,7 +326,7 @@
       }
     }
 
-    // Extract Profile URL / Unique Handle
+    // Extract Profile URL / Handle
     if (card) {
       try {
         const linkEl = card.querySelector('a[href*="/in/"]');
@@ -262,7 +340,7 @@
       } catch (e) {}
     }
 
-    // Fallback Unique Key: combine name and unique sequence
+    // Fallback Unique Key
     if (!profileKey) {
       if (name && name !== 'LinkedIn Member') {
         profileKey = `${normalizeText(name)}_${normalizeText(headline).slice(0, 20)}`;
@@ -272,20 +350,24 @@
       }
     }
 
+    // Extract Mutual Connections Count
+    const mutualConnections = getMutualConnectionCount(card);
+
     return {
       id: profileKey,
       profileKey,
       name,
       headline,
-      avatarUrl,
+      mutualConnections,
+      hasMutuals: mutualConnections !== null && mutualConnections >= 1,
       status: 'CONNECT_AVAILABLE'
     };
   }
 
   /**
-   * Discovers all Connect buttons on page using multi-strategy query
+   * Scans and qualifies profile cards on page
    */
-  function findConnectButtons(rootNode = document) {
+  function scanProfiles(rootNode = document) {
     let allButtons = [];
 
     try {
@@ -294,45 +376,88 @@
       allButtons = [];
     }
 
-    // Also include rootNode if it is itself a button
     if (rootNode.tagName === 'BUTTON' || rootNode.getAttribute?.('role') === 'button') {
       if (!allButtons.includes(rootNode)) allButtons.unshift(rootNode);
     }
 
-    const totalButtons = allButtons.length;
-    const candidates = [];
-    let eligibleCount = 0;
+    const cardsSeen = new Set();
+    const results = {
+      totalButtons: allButtons.length,
+      connectButtonsCount: 0,
+      profileCardsCount: 0,
+      profilesWithMutuals: 0,
+      profilesWithoutMutuals: 0,
+      qualifiedCandidates: [],
+      skippedCandidates: []
+    };
 
     for (const btn of allButtons) {
       const classification = classifyButton(btn);
+      const card = findCardContainer(btn);
+
+      if (card && !cardsSeen.has(card)) {
+        cardsSeen.add(card);
+        results.profileCardsCount++;
+      }
 
       if (classification.isEligible) {
-        eligibleCount++;
-        const card = findCardContainer(btn);
+        results.connectButtonsCount++;
         const metadata = extractProfileMetadata(card, btn);
 
-        candidates.push({
+        if (metadata.hasMutuals) {
+          results.profilesWithMutuals++;
+          results.qualifiedCandidates.push({
+            element: btn,
+            cardElement: card,
+            metadata,
+            classification,
+            isQualified: true
+          });
+        } else {
+          results.profilesWithoutMutuals++;
+          const reason = metadata.mutualConnections === 0 
+            ? '0 mutual connections' 
+            : 'No mutual connections detected';
+          
+          results.skippedCandidates.push({
+            element: btn,
+            cardElement: card,
+            metadata,
+            classification,
+            isQualified: false,
+            skipReason: reason
+          });
+        }
+      } else if (card) {
+        // Non-connect buttons (Follow / Pending / Message)
+        const metadata = extractProfileMetadata(card, btn);
+        const reason = classification.status === 'PENDING' 
+          ? 'Pending invitation'
+          : classification.status === 'FOLLOW' || classification.status === 'FOLLOWING'
+          ? 'Follow only'
+          : 'Connect unavailable';
+
+        results.skippedCandidates.push({
           element: btn,
           cardElement: card,
           metadata,
-          classification
+          classification,
+          isQualified: false,
+          skipReason: reason
         });
       }
     }
 
-    return {
-      totalFound: totalButtons,
-      eligibleCount,
-      candidates
-    };
+    return results;
   }
 
   return {
     isVisible,
     normalizeText,
+    getMutualConnectionCount,
     classifyButton,
     findCardContainer,
     extractProfileMetadata,
-    findConnectButtons
+    scanProfiles
   };
 });

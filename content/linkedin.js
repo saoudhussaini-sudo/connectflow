@@ -1,7 +1,7 @@
 /**
  * ConnectFlow - LinkedIn Content Script Orchestrator
- * High-reliability, watchdog-protected automated 5-second connection loop.
- * Features robust discovery, multi-strategy detection, and full diagnostic logging.
+ * High-reliability qualification pipeline, user-confirmed dispatch action,
+ * exact 5-second countdown cooldown, and comprehensive diagnostic logging.
  */
 
 (function () {
@@ -15,13 +15,13 @@
     return;
   }
 
-  const { STATES, MESSAGE_TYPES, TIMEOUTS, MAX_REQUESTS, LOOP_INTERVAL_MS } = Constants;
+  const { STATES, MESSAGE_TYPES, TIMEOUTS, MAX_REQUESTS, REQUEST_DELAY_MS } = Constants;
   const DEBUG = true;
 
   function logDebug(tag, ...args) {
     if (DEBUG) {
       const time = new Date().toTimeString().split(' ')[0];
-      console.log(`%c[ConnectFlow] [${time}] ${tag}:`, 'color: #ffffff; font-weight: bold;', ...args);
+      console.log(`%c[ConnectFlow] [${time}] ${tag}:`, 'color: #00d2ff; font-weight: bold;', ...args);
     }
   }
 
@@ -37,6 +37,7 @@
       // Central Resource Tracking
       this.activeTimers = new Set();
       this.activeObservers = new Set();
+      this.countdownTimer = null;
 
       // Session Deduplication
       this.processedProfileKeys = new Set();
@@ -53,6 +54,16 @@
           case MESSAGE_TYPES.START_SESSION:
             this.sentCount = payload?.state?.sentCount || 0;
             this.start();
+            sendResponse({ success: true });
+            break;
+
+          case MESSAGE_TYPES.CONFIRM_SEND_REQUEST:
+            this.handleUserConfirmedSend();
+            sendResponse({ success: true });
+            break;
+
+          case MESSAGE_TYPES.SKIP_CURRENT_PROFILE:
+            this.handleUserSkip();
             sendResponse({ success: true });
             break;
 
@@ -124,6 +135,11 @@
       }
       this.activeTimers.clear();
 
+      if (this.countdownTimer) {
+        clearInterval(this.countdownTimer);
+        this.countdownTimer = null;
+      }
+
       for (const observer of this.activeObservers) {
         try {
           observer.disconnect();
@@ -137,38 +153,38 @@
     }
 
     start() {
-      logDebug('START_SESSION', 'Initializing 5s loop session...');
+      logDebug('START_SESSION', 'Initializing qualification scan...');
       this.isRunning = true;
       this.sessionRunId = 'run_' + Date.now();
       this.currentOperationId = 0;
       this.cleanupCurrentOperation();
       this.startObserver();
-      this.processNextCycle();
+      this.scanForNextQualified();
     }
 
     pause() {
-      logDebug('PAUSE_SESSION', 'Pausing active loop...');
+      logDebug('PAUSE_SESSION', 'Pausing active workflow...');
       this.isRunning = false;
       this.cleanupCurrentOperation();
     }
 
     resume() {
-      logDebug('RESUME_SESSION', 'Resuming loop...');
+      logDebug('RESUME_SESSION', 'Resuming workflow...');
       this.isRunning = true;
       this.cleanupCurrentOperation();
       this.startObserver();
-      this.processNextCycle();
+      this.scanForNextQualified();
     }
 
     stop() {
-      logDebug('STOP_SESSION', 'Stopping and cleaning up all operations...');
+      logDebug('STOP_SESSION', 'Stopping and cleaning up all active operations...');
       this.isRunning = false;
       this.sessionRunId = null;
       this.cleanupCurrentOperation();
     }
 
     reset() {
-      logDebug('RESET_SESSION', 'Resetting session state and deduplication cache...');
+      logDebug('RESET_SESSION', 'Resetting session and cache...');
       this.stop();
       this.sentCount = 0;
       this.processedProfileKeys.clear();
@@ -190,50 +206,46 @@
     }
 
     /**
-     * Primary Automated Loop Cycle
+     * Primary Qualification Scanner
      */
-    async processNextCycle() {
+    async scanForNextQualified() {
       if (!this.isRunning || this.isProcessing) return;
 
       const opId = ++this.currentOperationId;
       const runId = this.sessionRunId;
 
-      logDebug('SCAN START', `Checking DOM for candidates (Cycle opId=${opId}, sentCount=${this.sentCount}/${MAX_REQUESTS})`);
+      logDebug('Scan started', `Cycle opId=${opId}, sentCount=${this.sentCount}/${MAX_REQUESTS}`);
 
-      // Check hard ceiling
       if (this.sentCount >= MAX_REQUESTS) {
-        logDebug('LIMIT_REACHED', '100 requests reached. Stopping session.');
+        logDebug('LIMIT_REACHED', '100 requests reached. Halting session.');
         this.stop();
         return;
       }
 
-      // Notify background: Scanning
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.STATE_TRANSITION,
-        payload: { nextState: STATES.SCANNING, statusDetail: 'Scanning for eligible profiles on page...' }
+        payload: { nextState: STATES.SCANNING, statusDetail: 'Scanning page for qualified profiles (≥1 mutual connection)...' }
       });
 
-      // Run Discovery with Diagnostic Logging
-      const candidate = this.findNextEligibleProfileWithDiagnostics();
+      const candidate = this.findNextQualifiedCandidate(opId, runId);
 
       if (!candidate) {
-        logDebug('SCAN RESULT', 'No unvisited eligible Connect button found in current viewport. Scrolling down...');
+        logDebug('SCAN RESULT', 'No unvisited qualified profiles in current view. Scrolling page...');
 
         chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.ACTIVITY_LOG,
-          payload: { message: 'No eligible button visible. Scrolling page to load more...', type: 'info' }
+          payload: { message: 'No qualified candidates visible. Scrolling to load more profiles...', type: 'info' }
         });
 
-        window.scrollBy({ top: 400, behavior: 'smooth' });
+        window.scrollBy({ top: 450, behavior: 'smooth' });
 
         this.setTimeoutGuarded(() => {
           if (this.isValidRun(opId, runId)) {
-            const retryCandidate = this.findNextEligibleProfileWithDiagnostics();
+            const retryCandidate = this.findNextQualifiedCandidate(opId, runId);
             if (retryCandidate) {
-              this.executeCandidateLifecycle(retryCandidate, opId, runId);
+              this.presentQualifiedCandidate(retryCandidate, opId, runId);
             } else {
-              // Retry scan in 2 seconds
-              this.scheduleNextCycle(2000);
+              this.scheduleNextScan(2000);
             }
           }
         }, 1500);
@@ -241,38 +253,63 @@
         return;
       }
 
-      // Candidate found: execute lifecycle
-      await this.executeCandidateLifecycle(candidate, opId, runId);
+      this.presentQualifiedCandidate(candidate, opId, runId);
     }
 
     /**
-     * Finds next eligible profile and outputs detailed diagnostic logs
+     * Scans DOM, processes skips with logging, updates diagnostics, and returns first qualified profile
      */
-    findNextEligibleProfileWithDiagnostics() {
-      const discovery = Detector.findConnectButtons(document);
+    findNextQualifiedCandidate(opId, runId) {
+      const scan = Detector.scanProfiles(document);
 
-      logDebug('TOTAL BUTTON CANDIDATES', discovery.totalFound);
-      logDebug('ELIGIBLE CONNECT BUTTONS', discovery.eligibleCount);
+      logDebug('Buttons found', scan.totalButtons);
+      logDebug('Connect candidates', scan.connectButtonsCount);
+      logDebug('Profile cards found', scan.profileCardsCount);
+      logDebug('Qualified profiles', scan.qualifiedCandidates.length);
+      logDebug('Current state', 'SCANNING');
 
-      for (const candidate of discovery.candidates) {
-        const key = candidate.metadata.profileKey;
-        const btn = candidate.element;
-        const isProcessed = this.processedProfileKeys.has(key) || this.processedElements.has(btn);
+      // Update Diagnostics in background
+      chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.UPDATE_DIAGNOSTICS,
+        payload: {
+          diagnostics: {
+            profileCardsDetected: scan.profileCardsCount,
+            connectButtonsDetected: scan.connectButtonsCount,
+            profilesWithMutuals: scan.profilesWithMutuals,
+            profilesWithoutMutuals: scan.profilesWithoutMutuals,
+            alreadyProcessed: this.processedProfileKeys.size
+          }
+        }
+      });
 
-        logDebug('BUTTON CANDIDATE', {
-          name: candidate.metadata.name,
-          key,
-          isProcessed,
-          text: (btn.textContent || '').trim(),
-          aria: btn.getAttribute('aria-label') || '',
-          class: btn.className,
-          visible: Detector.isVisible(btn),
-          disabled: !!btn.disabled
-        });
+      // 1. Process and log skipped candidates first
+      for (const skipped of scan.skippedCandidates) {
+        const key = skipped.metadata.profileKey;
+        const btn = skipped.element;
 
-        if (!isProcessed) {
-          logDebug('PROFILE ACCEPTED', `Selected: ${candidate.metadata.name} (Key: ${key})`);
-          return candidate;
+        if (!this.processedProfileKeys.has(key) && !this.processedElements.has(btn)) {
+          this.processedProfileKeys.add(key);
+          this.processedElements.add(btn);
+
+          logDebug('Candidate Skipped', `${skipped.metadata.name} — ${skipped.skipReason}`);
+          chrome.runtime.sendMessage({
+            type: MESSAGE_TYPES.PROFILE_DISQUALIFIED,
+            payload: {
+              profile: skipped.metadata,
+              reason: skipped.skipReason
+            }
+          });
+        }
+      }
+
+      // 2. Find first unvisited qualified candidate
+      for (const qualified of scan.qualifiedCandidates) {
+        const key = qualified.metadata.profileKey;
+        const btn = qualified.element;
+
+        if (!this.processedProfileKeys.has(key) && !this.processedElements.has(btn)) {
+          logDebug('Candidate Qualified', `${qualified.metadata.name} — ${qualified.metadata.mutualConnections} mutuals`);
+          return qualified;
         }
       }
 
@@ -280,23 +317,14 @@
     }
 
     /**
-     * Executes the complete profile lifecycle with global watchdog protection
+     * Highlights and presents qualified profile for user confirmation
      */
-    async executeCandidateLifecycle(candidate, opId, runId) {
+    presentQualifiedCandidate(candidate, opId, runId) {
       if (!this.isValidRun(opId, runId)) return;
 
-      this.isProcessing = true;
       this.currentCandidate = candidate;
-
       const profile = candidate.metadata;
       const button = candidate.element;
-      const initialText = button.textContent || '';
-
-      // Register deduplication immediately
-      this.processedProfileKeys.add(profile.profileKey);
-      this.processedElements.add(button);
-
-      logDebug('PROFILE READY', `Executing: ${profile.name} (Key: ${profile.profileKey})`);
 
       // Scroll into view & Highlight
       try {
@@ -306,47 +334,63 @@
       }
       this.highlightCandidate(candidate);
 
-      // Notify background: Profile Detected
+      // Notify background: Profile Qualified -> Waiting for User Confirmation
       chrome.runtime.sendMessage({
-        type: MESSAGE_TYPES.PROFILE_DETECTED,
+        type: MESSAGE_TYPES.PROFILE_QUALIFIED,
         payload: { profile }
       });
+    }
 
-      // Transition to Processing State
+    /**
+     * User clicks [ SEND REQUEST ] in popup -> Dispatches connection request
+     */
+    async handleUserConfirmedSend() {
+      if (!this.currentCandidate || this.isProcessing) return;
+
+      const candidate = this.currentCandidate;
+      const profile = candidate.metadata;
+      const button = candidate.element;
+      const initialText = button.textContent || '';
+      const opId = this.currentOperationId;
+      const runId = this.sessionRunId;
+
+      this.isProcessing = true;
+      this.processedProfileKeys.add(profile.profileKey);
+      this.processedElements.add(button);
+
+      logDebug('CONFIRMED_SEND', `User confirmed connection to ${profile.name}`);
+
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.REQUEST_PROCESSING,
         payload: { profile }
       });
 
-      // Global Step Watchdog (Guarantees recovery within 20 seconds if anything hangs)
       let isStepFinished = false;
       const watchdogTimer = this.setTimeoutGuarded(() => {
         if (!isStepFinished && this.isValidRun(opId, runId)) {
-          logDebug('WATCHDOG_TRIGGERED', `Watchdog expired on ${profile.name}`);
+          logDebug('WATCHDOG_TRIGGERED', `Watchdog timeout on ${profile.name}`);
           isStepFinished = true;
           this.handleStepTimeout('GLOBAL_STEP_WATCHDOG', profile, opId, runId);
         }
       }, TIMEOUTS.GLOBAL_STEP_WATCHDOG);
 
       try {
-        // Step 1: Click Connect Button
-        logDebug('ACTION_CLICK', `Clicking Connect button for ${profile.name}`);
+        // Step 1: Click Connect
+        logDebug('CLICK_ACTION', `Clicking Connect button for ${profile.name}`);
         button.click();
 
-        // Step 2: Handle any "Send without a note" or "Send" modal (with strict timeout)
-        logDebug('MODAL_CHECK', `Checking for invitation modal dialog...`);
+        // Step 2: Handle Modal (Send without a note)
         await this.handlePotentialModalWithTimeout(opId, runId, TIMEOUTS.MODAL_HANDLER_TIMEOUT);
 
         if (!this.isValidRun(opId, runId) || isStepFinished) return;
 
-        // Step 3: Transition to Verifying State
+        // Step 3: Transition to Verifying
         chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.REQUEST_VERIFYING,
           payload: { profile }
         });
 
-        // Step 4: Verify that invitation was actually dispatched (with strict timeout)
-        logDebug('VERIFYING', `Verifying status changed to Pending...`);
+        // Step 4: Verify Success
         const verified = await this.verifyActionSuccessWithTimeout(button, initialText, opId, runId, TIMEOUTS.VERIFICATION_TIMEOUT);
 
         if (!this.isValidRun(opId, runId) || isStepFinished) return;
@@ -358,19 +402,25 @@
         if (verified) {
           this.sentCount += 1;
           logDebug('SUCCESS', `Request verified for ${profile.name}! Total: ${this.sentCount}/${MAX_REQUESTS}`);
-          
+
           this.clearHighlight();
           chrome.runtime.sendMessage({
             type: MESSAGE_TYPES.REQUEST_VERIFIED,
             payload: { profile }
           });
+
+          // Start exact 5-second countdown cooldown
+          this.start5SecondCountdown(opId, runId);
         } else {
-          logDebug('VERIFICATION_FAILED', `Verification timed out or not accepted for ${profile.name}`);
+          logDebug('VERIFICATION_FAILED', `Verification timed out for ${profile.name}`);
           this.clearHighlight();
           chrome.runtime.sendMessage({
             type: MESSAGE_TYPES.REQUEST_FAILED,
             payload: { error: 'Status did not change to Pending within timeout', profile }
           });
+          this.isProcessing = false;
+          this.currentCandidate = null;
+          this.scheduleNextScan(1500);
         }
       } catch (err) {
         if (!isStepFinished && this.isValidRun(opId, runId)) {
@@ -384,28 +434,77 @@
             type: MESSAGE_TYPES.REQUEST_FAILED,
             payload: { error: err.message || 'Execution error', profile }
           });
+          this.isProcessing = false;
+          this.currentCandidate = null;
+          this.scheduleNextScan(1500);
         }
-      } finally {
-        this.isProcessing = false;
-        this.currentCandidate = null;
+      }
+    }
 
-        if (this.sentCount >= MAX_REQUESTS) {
-          logDebug('LIMIT_REACHED', '100 requests reached. Halting session.');
-          this.stop();
+    /**
+     * User clicks [ SKIP ] in popup
+     */
+    handleUserSkip() {
+      if (!this.currentCandidate) return;
+
+      const profile = this.currentCandidate.metadata;
+      const btn = this.currentCandidate.element;
+
+      this.processedProfileKeys.add(profile.profileKey);
+      this.processedElements.add(btn);
+      this.clearHighlight();
+      this.currentCandidate = null;
+      this.isProcessing = false;
+
+      logDebug('USER_SKIP', `User skipped ${profile.name}`);
+      chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.PROFILE_DISQUALIFIED,
+        payload: { profile, reason: 'Skipped by user' }
+      });
+
+      this.scheduleNextScan(500);
+    }
+
+    /**
+     * Exact 5-Second Countdown Cooldown
+     */
+    start5SecondCountdown(opId, runId) {
+      this.isProcessing = false;
+      this.currentCandidate = null;
+
+      if (this.sentCount >= MAX_REQUESTS) {
+        logDebug('LIMIT_REACHED', '100 requests reached. Stopping session.');
+        this.stop();
+        return;
+      }
+
+      let remaining = 5;
+
+      if (this.countdownTimer) {
+        clearInterval(this.countdownTimer);
+      }
+
+      this.countdownTimer = setInterval(() => {
+        if (!this.isRunning || this.sessionRunId !== runId) {
+          clearInterval(this.countdownTimer);
+          this.countdownTimer = null;
           return;
         }
 
-        if (this.isRunning && this.sessionRunId === runId) {
-          logDebug('SCHEDULE_NEXT', `Waiting ${LOOP_INTERVAL_MS / 1000}s before next cycle...`);
-          
-          chrome.runtime.sendMessage({
-            type: MESSAGE_TYPES.WAITING_NEXT_CYCLE,
-            payload: { remainingSeconds: 5 }
-          });
+        remaining -= 1;
+        logDebug('COUNTDOWN', `Next scan in ${remaining}s...`);
 
-          this.scheduleNextCycle(LOOP_INTERVAL_MS);
+        chrome.runtime.sendMessage({
+          type: MESSAGE_TYPES.COUNTDOWN_TICK,
+          payload: { seconds: remaining }
+        });
+
+        if (remaining <= 0) {
+          clearInterval(this.countdownTimer);
+          this.countdownTimer = null;
+          this.scanForNextQualified();
         }
-      }
+      }, 1000);
     }
 
     handleStepTimeout(stage, profile, opId, runId) {
@@ -419,20 +518,20 @@
       });
 
       if (this.isRunning && this.sessionRunId === runId) {
-        this.scheduleNextCycle(1500);
+        this.scheduleNextScan(1500);
       }
     }
 
-    scheduleNextCycle(delayMs = LOOP_INTERVAL_MS) {
+    scheduleNextScan(delayMs = 1500) {
       this.setTimeoutGuarded(() => {
         if (this.isRunning) {
-          this.processNextCycle();
+          this.scanForNextQualified();
         }
       }, delayMs);
     }
 
     isValidRun(opId, runId) {
-      return this.isRunning && this.sessionRunId === runId && this.currentOperationId === opId;
+      return this.isRunning && this.sessionRunId === runId;
     }
 
     async handlePotentialModalWithTimeout(opId, runId, timeoutMs = TIMEOUTS.MODAL_HANDLER_TIMEOUT) {
@@ -565,7 +664,8 @@
         const badge = document.createElement('div');
         badge.className = 'connectflow-badge-indicator';
         badge.id = 'connectflow-active-badge';
-        badge.textContent = 'Auto Connecting';
+        const mutuals = candidate.metadata.mutualConnections || 1;
+        badge.textContent = `● Qualified (${mutuals} Mutuals)`;
         target.appendChild(badge);
       }
     }

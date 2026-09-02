@@ -8,119 +8,167 @@
 </head>
 <body>
   <div class="app">
-    <!-- Header -->
+    <!-- Apple-style Glass Header -->
     <header class="header">
       <div class="brand">
-        <h1 class="brand-title">CONNECTFLOW</h1>
-        <p class="brand-subtitle">LinkedIn Connection Assistant</p>
+        <div class="brand-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <line x1="19" y1="8" x2="19" y2="14"></line>
+            <line x1="22" y1="11" x2="16" y2="11"></line>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">CONNECTFLOW</h1>
+          <p class="brand-subtitle">LinkedIn Connection Assistant</p>
+        </div>
       </div>
-      <div class="status-indicator">
+      <div class="status-pill" id="status-pill">
         <span class="status-dot" id="status-dot"></span>
         <span class="status-label" id="status-label">READY</span>
       </div>
     </header>
 
-    <div class="divider"></div>
-
-    <!-- Main Content Area -->
+    <!-- Main Container -->
     <main class="content">
 
-      <!-- Requests Hero -->
-      <section class="section requests-section">
-        <div class="section-title">REQUESTS</div>
-        <div class="requests-row">
+      <!-- Requests Hero Card -->
+      <section class="card requests-card">
+        <div class="card-header">
+          <span class="card-label">SESSION PROGRESS</span>
+          <span class="remaining-badge"><span id="remaining-count">100</span> remaining</span>
+        </div>
+        <div class="requests-hero">
           <div class="requests-numbers">
             <span class="count-current" id="sent-count">0</span>
             <span class="count-divider">/</span>
             <span class="count-max" id="max-count">100</span>
           </div>
-          <span class="requests-remaining"><span id="remaining-count">100</span> remaining</span>
         </div>
         <div class="progress-track">
-          <div class="progress-bar" id="progress-bar"></div>
+          <div class="progress-fill" id="progress-bar"></div>
         </div>
       </section>
 
-      <div class="divider"></div>
+      <!-- Qualification Parameters Bar -->
+      <div class="specs-grid">
+        <div class="spec-box">
+          <div class="spec-label">MUTUAL FILTER</div>
+          <div class="spec-value">≥ 1 Required</div>
+        </div>
+        <div class="spec-box">
+          <div class="spec-label">EXACT DELAY</div>
+          <div class="spec-value">5 Seconds</div>
+        </div>
+      </div>
 
-      <!-- Statistics (3-column minimalist layout) -->
-      <section class="stats-section">
-        <div class="stat-col">
-          <span class="stat-label">SENT</span>
-          <span class="stat-value" id="stat-sent">0</span>
+      <!-- Quick Metrics Strip -->
+      <div class="metrics-strip">
+        <div class="metric-item">
+          <span class="metric-num text-success" id="stat-sent">0</span>
+          <span class="metric-label">SENT</span>
         </div>
-        <div class="stat-divider"></div>
-        <div class="stat-col">
-          <span class="stat-label">SKIPPED</span>
-          <span class="stat-value" id="stat-skipped">0</span>
+        <div class="metric-sep"></div>
+        <div class="metric-item">
+          <span class="metric-num text-muted" id="stat-skipped">0</span>
+          <span class="metric-label">SKIPPED</span>
         </div>
-        <div class="stat-divider"></div>
-        <div class="stat-col">
-          <span class="stat-label">ERRORS</span>
-          <span class="stat-value" id="stat-errors">0</span>
+        <div class="metric-sep"></div>
+        <div class="metric-item">
+          <span class="metric-num text-warning" id="stat-errors">0</span>
+          <span class="metric-label">ERRORS</span>
+        </div>
+      </div>
+
+      <!-- Current Profile / Confirmation Card -->
+      <section class="card profile-card" id="profile-card">
+        <div class="card-header">
+          <span class="card-label">CURRENT PROFILE</span>
+          <span class="profile-badge-state" id="profile-badge-state">IDLE</span>
+        </div>
+
+        <div class="profile-body">
+          <div class="profile-avatar-wrap">
+            <div class="profile-avatar-initials" id="profile-initials">CF</div>
+          </div>
+          <div class="profile-meta">
+            <div class="profile-name" id="profile-name">No Profile Active</div>
+            <div class="profile-headline" id="profile-headline">Start session on LinkedIn to begin scanning.</div>
+            <div class="profile-mutuals" id="profile-mutuals">
+              <span class="mutuals-icon">👥</span>
+              <span id="profile-mutuals-text">Mutual filter active (≥1)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Action Box (Send Confirmation or Countdown Cooldown) -->
+        <div class="profile-actions-box hidden" id="profile-actions-box">
+          <button class="btn btn-confirm" id="btn-send-confirm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            <span>SEND REQUEST</span>
+          </button>
+          <button class="btn btn-skip" id="btn-skip-profile">SKIP</button>
+        </div>
+
+        <!-- 5-Second Countdown Banner -->
+        <div class="countdown-banner hidden" id="countdown-banner">
+          <div class="countdown-spinner"></div>
+          <div class="countdown-text">
+            <span>Next scan in <strong id="countdown-num">5</strong>s</span>
+          </div>
         </div>
       </section>
 
-      <div class="divider"></div>
-
-      <!-- Current Profile Section -->
-      <section class="section profile-section">
-        <div class="section-title">CURRENT PROFILE</div>
-        <div class="profile-details">
-          <div class="profile-name" id="profile-name">No Profile Active</div>
-          <div class="profile-headline" id="profile-headline">Start session on LinkedIn to begin scanning.</div>
-          <div class="profile-status" id="profile-status">STATUS: IDLE</div>
+      <!-- Activity Feed Card -->
+      <section class="card activity-card">
+        <div class="card-header">
+          <span class="card-label">ACTIVITY LOG</span>
+          <button class="btn-clear" id="btn-clear-activity">Clear</button>
         </div>
-      </section>
-
-      <div class="divider"></div>
-
-      <!-- Activity Section -->
-      <section class="section activity-section">
-        <div class="activity-header">
-          <span class="section-title">ACTIVITY LOG (5s INTERVALS)</span>
-          <button class="btn-text" id="btn-clear-activity">Clear</button>
-        </div>
-        <div class="activity-list" id="activity-list">
+        <div class="activity-feed" id="activity-list">
           <div class="activity-empty" id="activity-empty">No activity recorded yet.</div>
         </div>
       </section>
 
-      <div class="divider"></div>
-
-      <!-- Diagnostics Panel -->
-      <section class="section diagnostics-section">
-        <div class="diagnostics-header" id="btn-toggle-diagnostics">
-          <span class="section-title">DIAGNOSTICS</span>
-          <span class="btn-text" id="diagnostics-toggle-label">Show</span>
+      <!-- Diagnostics Collapsible -->
+      <section class="card diagnostics-card">
+        <div class="diagnostics-toggle" id="btn-toggle-diagnostics">
+          <span class="card-label">SETTINGS & DIAGNOSTICS</span>
+          <span class="toggle-icon" id="diagnostics-toggle-label">Show</span>
         </div>
-        <div class="diagnostics-content hidden" id="diagnostics-content">
-          <div class="diag-row"><span>State:</span> <span class="diag-val" id="diag-state">IDLE</span></div>
-          <div class="diag-row"><span>DOM Buttons Found:</span> <span class="diag-val" id="diag-buttons-found">0</span></div>
-          <div class="diag-row"><span>Eligible Candidates:</span> <span class="diag-val" id="diag-eligible-count">0</span></div>
-          <div class="diag-row"><span>Active Session Run:</span> <span class="diag-val" id="diag-op-id">--</span></div>
+        <div class="diagnostics-body hidden" id="diagnostics-content">
+          <div class="diag-item"><span>Profile Cards Detected:</span> <strong id="diag-cards-detected">0</strong></div>
+          <div class="diag-item"><span>Connect Buttons Found:</span> <strong id="diag-buttons-found">0</strong></div>
+          <div class="diag-item"><span>Profiles With Mutuals:</span> <strong id="diag-with-mutuals">0</strong></div>
+          <div class="diag-item"><span>Profiles Without Mutuals:</span> <strong id="diag-without-mutuals">0</strong></div>
+          <div class="diag-item"><span>Already Processed:</span> <strong id="diag-processed-count">0</strong></div>
+          <div class="diag-item"><span>Current State:</span> <strong id="diag-state">IDLE</strong></div>
+          <div class="diag-item"><span>Session Run ID:</span> <strong id="diag-op-id">--</strong></div>
         </div>
       </section>
 
-      <div class="divider"></div>
-
-      <!-- Global Session Controls -->
-      <section class="controls-section">
-        <button class="btn btn-main" id="btn-start">START AUTOMATED LOOP (5s)</button>
+      <!-- Global Controls -->
+      <section class="controls-wrap">
+        <button class="btn btn-primary" id="btn-start">START QUALIFIED SCAN</button>
         
-        <div class="active-controls-row hidden" id="active-controls-row">
-          <button class="btn btn-secondary flex-1" id="btn-pause">PAUSE</button>
-          <button class="btn btn-danger flex-1" id="btn-stop">STOP</button>
+        <div class="active-controls hidden" id="active-controls-row">
+          <button class="btn btn-secondary" id="btn-pause">PAUSE</button>
+          <button class="btn btn-danger" id="btn-stop">STOP</button>
         </div>
       </section>
 
-      <!-- Limit Reached Notice (Shown when 100 requests reached) -->
+      <!-- Limit Reached Modal -->
       <div class="limit-overlay hidden" id="limit-overlay">
-        <div class="limit-card">
-          <div class="limit-title">SESSION COMPLETE</div>
+        <div class="limit-modal">
+          <div class="limit-icon">✓</div>
+          <div class="limit-title">SESSION COMPLETED</div>
           <div class="limit-metric">100 / 100</div>
-          <p class="limit-desc">100-request session limit reached. Further request processing is halted.</p>
-          <button class="btn btn-main w-full" id="btn-new-session">START NEW SESSION</button>
+          <p class="limit-desc">100-request session safety ceiling reached. All actions stopped.</p>
+          <button class="btn btn-primary w-full" id="btn-new-session">START NEW SESSION</button>
         </div>
       </div>
 
