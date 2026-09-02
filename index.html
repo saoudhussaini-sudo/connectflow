@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ConnectFlow — LinkedIn Connection Assistant (Apple / Product Style)</title>
-  <meta name="description" content="Apple-style LinkedIn Connection Assistant with mutual-connection qualification (≥1), user-confirmed dispatch, and 100-request safety ceiling.">
+  <title>ConnectFlow — Automated LinkedIn Connection Assistant (Apple Style)</title>
+  <meta name="description" content="Apple-style Automated LinkedIn Connection Assistant with mutual connection filter (≥1), automated dispatches, 0-reset counter, and 100-request safety ceiling.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=SF+Pro+Display:wght@700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-primary: #080a0f;
-      --bg-card: rgba(22, 27, 38, 0.7);
+      --bg-card: rgba(22, 27, 38, 0.75);
       --border-card: rgba(255, 255, 255, 0.09);
       --accent-blue: #0a84ff;
       --accent-green: #30d158;
@@ -280,28 +280,6 @@
       gap: 4px;
     }
 
-    .sim-btn-confirm {
-      width: 100%;
-      background: #ffffff;
-      color: #000000;
-      font-weight: 800;
-      font-size: 12px;
-      padding: 10px;
-      border-radius: 10px;
-      border: none;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      transition: all 0.15s ease;
-    }
-
-    .sim-btn-confirm:hover {
-      background: #e2e8f0;
-      transform: translateY(-1px);
-    }
-
     /* Features */
     .features {
       padding: 80px 0;
@@ -372,13 +350,13 @@
       <div>
         <div class="hero-badge">
           <span class="hero-badge-dot"></span>
-          <span>MUTUAL CONNECTION FILTER (≥ 1)</span>
+          <span>AUTOMATED DISPATCH LOOP (≥ 1 MUTUAL)</span>
         </div>
         <h1 class="hero-title">
-          <span>Intelligent LinkedIn Outreach with User-Confirmed Control.</span>
+          <span>Automated LinkedIn Outreach with Zero-Reset Sessions.</span>
         </h1>
         <p class="hero-desc">
-          Automated mutual-connection qualification (≥1 required), user-confirmed dispatch, exact 5-second cooldown, and an Apple-style utility interface.
+          Automated discovery & dispatches for candidates with ≥1 mutual connection, fresh 0/100 session resets, exact 5-second cooldowns, and Apple product styling.
         </p>
         <div class="hero-buttons">
           <a href="https://github.com/saoudhussaini-sudo/connectflow" target="_blank" class="btn-apple">
@@ -397,11 +375,11 @@
           <div class="sim-header">
             <div>
               <div style="font-size: 13px; font-weight: 800;">CONNECTFLOW</div>
-              <div style="font-size: 11px; color: var(--text-muted);">LinkedIn Connection Assistant</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Automated LinkedIn Assistant</div>
             </div>
             <div class="sim-status-pill">
               <span class="sim-status-dot" id="sim-dot"></span>
-              <span id="sim-status-label">QUALIFIED (READY)</span>
+              <span id="sim-status-label">AUTO LOOP ACTIVE</span>
             </div>
           </div>
 
@@ -409,15 +387,15 @@
           <div class="sim-box">
             <div style="display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; color: var(--text-muted);">
               <span>SESSION PROGRESS</span>
-              <span style="color: var(--text-secondary);"><span id="sim-remaining">63</span> remaining</span>
+              <span style="color: var(--text-secondary);"><span id="sim-remaining">96</span> remaining</span>
             </div>
             <div style="display: flex; align-items: baseline; gap: 4px;">
-              <span style="font-size: 28px; font-weight: 800;" id="sim-count">37</span>
+              <span style="font-size: 28px; font-weight: 800;" id="sim-count">4</span>
               <span style="font-size: 18px; color: var(--text-muted);">/</span>
               <span style="font-size: 28px; font-weight: 800; color: var(--text-secondary);">100</span>
             </div>
             <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
-              <div id="sim-progress" style="width: 37%; height: 100%; background: #ffffff;"></div>
+              <div id="sim-progress" style="width: 4%; height: 100%; background: #ffffff;"></div>
             </div>
           </div>
 
@@ -428,7 +406,7 @@
               <div style="font-size: 12px; font-weight: 700; color: #ffffff;">≥ 1 Required</div>
             </div>
             <div style="background: rgba(14,17,24,0.7); border: 1px solid var(--border-card); border-radius: 10px; padding: 8px 10px;">
-              <div style="font-size: 9px; font-weight: 700; color: var(--text-muted);">EXACT DELAY</div>
+              <div style="font-size: 9px; font-weight: 700; color: var(--text-muted);">COOLDOWN</div>
               <div style="font-size: 12px; font-weight: 700; color: #ffffff;">5 Seconds</div>
             </div>
           </div>
@@ -437,7 +415,7 @@
           <div class="sim-box">
             <div style="display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; color: var(--text-muted);">
               <span>CURRENT QUALIFIED PROFILE</span>
-              <span style="background: var(--accent-green-bg); color: var(--accent-green); padding: 2px 6px; border-radius: 4px;">QUALIFIED</span>
+              <span style="background: var(--accent-green-bg); color: var(--accent-green); padding: 2px 6px; border-radius: 4px;">AUTO CONNECTING</span>
             </div>
             <div class="sim-profile-row">
               <div class="sim-avatar" id="sim-avatar">AK</div>
@@ -446,12 +424,6 @@
                 <div style="font-size: 11px; color: var(--text-secondary);" id="sim-title">Lead Software Engineer @ Stripe</div>
                 <div class="sim-badge-mutual" id="sim-mutual">👥 4 mutual connections</div>
               </div>
-            </div>
-            <div id="sim-actions-box">
-              <button class="sim-btn-confirm" id="sim-btn-send">
-                <span>SEND REQUEST</span>
-                <span>→</span>
-              </button>
             </div>
           </div>
         </div>
@@ -462,22 +434,27 @@
   <!-- Features -->
   <section class="features" id="features">
     <div class="container">
-      <h2 class="section-title">Strict Qualification & Safety Architecture</h2>
+      <h2 class="section-title">Automated Outreach Architecture</h2>
       <div class="features-grid">
+        <div class="feature-card">
+          <span class="feature-icon">🔄</span>
+          <h3 class="feature-h">Fresh 0/100 Counter Resets</h3>
+          <p class="feature-p">Every new session automatically resets the counter to 0/100, giving you a fresh, dedicated connection dispatch run.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">⚡</span>
+          <h3 class="feature-h">Fully Automated Dispatches</h3>
+          <p class="feature-p">Runs on its own without manual permission prompts: detects qualified candidates, clicks Connect, dismisses modals, and verifies status.</p>
+        </div>
         <div class="feature-card">
           <span class="feature-icon">🛡️</span>
           <h3 class="feature-h">≥ 1 Mutual Connection Filter</h3>
-          <p class="feature-p">Inspects rendered profile cards. Discards candidates with 0 mutuals, Follow-only, or Pending invitations to maintain high-quality outreach.</p>
-        </div>
-        <div class="feature-card">
-          <span class="feature-icon">👆</span>
-          <h3 class="feature-h">User-Confirmed Dispatch</h3>
-          <p class="feature-p">Presents the qualified candidate with mutual connection count. Dispatches only upon explicit user confirmation.</p>
+          <p class="feature-p">Inspects rendered profile cards and qualifies candidates only if they have 1 or more mutual connections.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">⏱️</span>
           <h3 class="feature-h">Exact 5-Second Cooldown</h3>
-          <p class="feature-p">Runs an exact 5,000ms countdown timer between user-confirmed dispatches with instant cancellation on STOP or PAUSE.</p>
+          <p class="feature-p">Runs an exact 5,000ms countdown timer between automated dispatches with instant cancellation on STOP or PAUSE.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">🛑</span>
@@ -487,12 +464,7 @@
         <div class="feature-card">
           <span class="feature-icon">🍎</span>
           <h3 class="feature-h">Apple Product UI</h3>
-          <p class="feature-p">Designed with SF Pro typography, refined frosted glass layers, live countdown badges, and embedded DOM diagnostic metrics.</p>
-        </div>
-        <div class="feature-card">
-          <span class="feature-icon">⚡</span>
-          <h3 class="feature-h">Manifest V3 Native</h3>
-          <p class="feature-p">Built on Chrome Manifest V3 standard with guaranteed message response timeouts and zero memory leaks.</p>
+          <p class="feature-p">Designed with SF Pro typography, refined frosted glass layers, live countdown cooldown badges, and real-time DOM diagnostics.</p>
         </div>
       </div>
     </div>
@@ -500,8 +472,7 @@
 
   <script>
     (function() {
-      let count = 37;
-      const btnSend = document.getElementById('sim-btn-send');
+      let count = 4;
       const countEl = document.getElementById('sim-count');
       const remEl = document.getElementById('sim-remaining');
       const progEl = document.getElementById('sim-progress');
@@ -509,43 +480,28 @@
       const titleEl = document.getElementById('sim-title');
       const avatarEl = document.getElementById('sim-avatar');
       const mutualEl = document.getElementById('sim-mutual');
-      const statusLabel = document.getElementById('sim-status-label');
 
       const profiles = [
         { name: 'Elena Rostova', title: 'VP of Product @ Linear', initials: 'ER', mutuals: '6 mutual connections' },
         { name: 'Marcus Vance', title: 'Staff AI Engineer @ OpenAI', initials: 'MV', mutuals: '3 mutual connections' },
-        { name: 'Priya Sharma', title: 'Senior Director @ Databricks', initials: 'PS', mutuals: '8 mutual connections' }
+        { name: 'Priya Sharma', title: 'Senior Director @ Databricks', initials: 'PS', mutuals: '8 mutual connections' },
+        { name: 'Arjun Kumar', title: 'Lead Software Engineer @ Stripe', initials: 'AK', mutuals: '4 mutual connections' }
       ];
       let pIdx = 0;
 
-      btnSend.addEventListener('click', () => {
-        btnSend.disabled = true;
-        btnSend.textContent = 'CONNECTING...';
-        statusLabel.textContent = 'VERIFYING';
+      setInterval(() => {
+        count = Math.min(100, count + 1);
+        countEl.textContent = count;
+        remEl.textContent = 100 - count;
+        progEl.style.width = count + '%';
 
-        setTimeout(() => {
-          count = Math.min(100, count + 1);
-          countEl.textContent = count;
-          remEl.textContent = 100 - count;
-          progEl.style.width = count + '%';
-
-          btnSend.textContent = 'REQUEST SENT ✓';
-          statusLabel.textContent = '5s COOLDOWN';
-
-          setTimeout(() => {
-            const p = profiles[pIdx % profiles.length];
-            pIdx++;
-            nameEl.textContent = p.name;
-            titleEl.textContent = p.title;
-            avatarEl.textContent = p.initials;
-            mutualEl.textContent = '👥 ' + p.mutuals;
-
-            btnSend.disabled = false;
-            btnSend.innerHTML = '<span>SEND REQUEST</span> <span>→</span>';
-            statusLabel.textContent = 'QUALIFIED (READY)';
-          }, 2000);
-        }, 1000);
-      });
+        const p = profiles[pIdx % profiles.length];
+        pIdx++;
+        nameEl.textContent = p.name;
+        titleEl.textContent = p.title;
+        avatarEl.textContent = p.initials;
+        mutualEl.textContent = '👥 ' + p.mutuals;
+      }, 5000);
     })();
   </script>
 </body>

@@ -21,7 +21,7 @@
         </div>
         <div class="brand-text">
           <h1 class="brand-title">CONNECTFLOW</h1>
-          <p class="brand-subtitle">LinkedIn Connection Assistant</p>
+          <p class="brand-subtitle">Automated LinkedIn Assistant</p>
         </div>
       </div>
       <div class="status-pill" id="status-pill">
@@ -58,7 +58,7 @@
           <div class="spec-value">≥ 1 Required</div>
         </div>
         <div class="spec-box">
-          <div class="spec-label">EXACT DELAY</div>
+          <div class="spec-label">COOLDOWN</div>
           <div class="spec-value">5 Seconds</div>
         </div>
       </div>
@@ -81,7 +81,7 @@
         </div>
       </div>
 
-      <!-- Current Profile / Confirmation Card -->
+      <!-- Current Profile Card -->
       <section class="card profile-card" id="profile-card">
         <div class="card-header">
           <span class="card-label">CURRENT PROFILE</span>
@@ -94,7 +94,7 @@
           </div>
           <div class="profile-meta">
             <div class="profile-name" id="profile-name">No Profile Active</div>
-            <div class="profile-headline" id="profile-headline">Start session on LinkedIn to begin scanning.</div>
+            <div class="profile-headline" id="profile-headline">Start automated session on LinkedIn to begin.</div>
             <div class="profile-mutuals" id="profile-mutuals">
               <span class="mutuals-icon">👥</span>
               <span id="profile-mutuals-text">Mutual filter active (≥1)</span>
@@ -102,23 +102,11 @@
           </div>
         </div>
 
-        <!-- Dynamic Action Box (Send Confirmation or Countdown Cooldown) -->
-        <div class="profile-actions-box hidden" id="profile-actions-box">
-          <button class="btn btn-confirm" id="btn-send-confirm">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-            <span>SEND REQUEST</span>
-          </button>
-          <button class="btn btn-skip" id="btn-skip-profile">SKIP</button>
-        </div>
-
-        <!-- 5-Second Countdown Banner -->
+        <!-- 5-Second Countdown Cooldown Banner -->
         <div class="countdown-banner hidden" id="countdown-banner">
           <div class="countdown-spinner"></div>
           <div class="countdown-text">
-            <span>Next scan in <strong id="countdown-num">5</strong>s</span>
+            <span>Next auto-send in <strong id="countdown-num">5</strong>s</span>
           </div>
         </div>
       </section>
@@ -126,7 +114,7 @@
       <!-- Activity Feed Card -->
       <section class="card activity-card">
         <div class="card-header">
-          <span class="card-label">ACTIVITY LOG</span>
+          <span class="card-label">ACTIVITY LOG (5s DELAYS)</span>
           <button class="btn-clear" id="btn-clear-activity">Clear</button>
         </div>
         <div class="activity-feed" id="activity-list">
@@ -153,7 +141,7 @@
 
       <!-- Global Controls -->
       <section class="controls-wrap">
-        <button class="btn btn-primary" id="btn-start">START QUALIFIED SCAN</button>
+        <button class="btn btn-primary" id="btn-start">START AUTOMATED LOOP (5s)</button>
         
         <div class="active-controls hidden" id="active-controls-row">
           <button class="btn btn-secondary" id="btn-pause">PAUSE</button>
@@ -168,7 +156,7 @@
           <div class="limit-title">SESSION COMPLETED</div>
           <div class="limit-metric">100 / 100</div>
           <p class="limit-desc">100-request session safety ceiling reached. All actions stopped.</p>
-          <button class="btn btn-primary w-full" id="btn-new-session">START NEW SESSION</button>
+          <button class="btn btn-primary w-full" id="btn-new-session">START NEW SESSION (0/100)</button>
         </div>
       </div>
 

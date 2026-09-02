@@ -1,6 +1,6 @@
 /**
  * ConnectFlow - Apple-Style Popup Controller
- * Real-time State Machine Sync, User-Confirmed Actions, Live Countdown & Diagnostics
+ * Real-time State Machine Sync, Automatic Sends, Live Countdown & Fresh Counter Reset
  */
 
 (function () {
@@ -32,10 +32,6 @@
     profileHeadline: document.getElementById('profile-headline'),
     profileMutuals: document.getElementById('profile-mutuals'),
     profileMutualsText: document.getElementById('profile-mutuals-text'),
-
-    profileActionsBox: document.getElementById('profile-actions-box'),
-    btnSendConfirm: document.getElementById('btn-send-confirm'),
-    btnSkipProfile: document.getElementById('btn-skip-profile'),
 
     countdownBanner: document.getElementById('countdown-banner'),
     countdownNum: document.getElementById('countdown-num'),
@@ -98,9 +94,6 @@
     DOM.btnPause.addEventListener('click', handlePauseResume);
     DOM.btnStop.addEventListener('click', handleStop);
 
-    DOM.btnSendConfirm.addEventListener('click', handleSendConfirm);
-    DOM.btnSkipProfile.addEventListener('click', handleSkipProfile);
-
     DOM.btnClearActivity.addEventListener('click', handleClearActivity);
     DOM.btnNewSession.addEventListener('click', handleResetSession);
 
@@ -142,37 +135,14 @@
   }
 
   async function handleStart() {
-    if (currentState.sentCount >= MAX_REQUESTS) {
-      DOM.limitOverlay.classList.remove('hidden');
-      return;
-    }
-
     try {
+      // Starts fresh session resetting counter to 0
       const resp = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.START_SESSION });
       if (resp && resp.error === 'NO_LINKEDIN_TAB') {
         DOM.profileHeadline.textContent = 'Please open a LinkedIn tab first to start.';
       }
     } catch (err) {
       console.warn('[ConnectFlow] Start message failed:', err);
-    }
-  }
-
-  async function handleSendConfirm() {
-    try {
-      DOM.btnSendConfirm.disabled = true;
-      await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.CONFIRM_SEND_REQUEST });
-    } catch (err) {
-      console.warn('[ConnectFlow] Confirm send failed:', err);
-    } finally {
-      DOM.btnSendConfirm.disabled = false;
-    }
-  }
-
-  async function handleSkipProfile() {
-    try {
-      await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.SKIP_CURRENT_PROFILE });
-    } catch (err) {
-      console.warn('[ConnectFlow] Skip failed:', err);
     }
   }
 
@@ -205,7 +175,7 @@
   async function handleResetSession() {
     DOM.limitOverlay.classList.add('hidden');
     try {
-      await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.RESET_SESSION });
+      await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.START_SESSION });
     } catch (err) {
       console.warn('[ConnectFlow] Reset message failed:', err);
     }
@@ -237,16 +207,11 @@
     switch (status) {
       case STATES.SCANNING:
         DOM.statusDot.classList.add('scanning');
-        DOM.statusLabel.textContent = 'SCANNING';
-        break;
-      case STATES.WAITING_FOR_CONFIRMATION:
-      case STATES.PROFILE_READY:
-        DOM.statusDot.classList.add('waiting');
-        DOM.statusLabel.textContent = 'QUALIFIED (READY)';
+        DOM.statusLabel.textContent = 'AUTO SCANNING';
         break;
       case STATES.PROCESSING:
         DOM.statusDot.classList.add('scanning');
-        DOM.statusLabel.textContent = 'CONNECTING';
+        DOM.statusLabel.textContent = 'AUTO CONNECTING';
         break;
       case STATES.VERIFYING:
         DOM.statusDot.classList.add('scanning');
@@ -303,8 +268,6 @@
     const status = currentState.status;
 
     if (profile && (
-      status === STATES.WAITING_FOR_CONFIRMATION ||
-      status === STATES.PROFILE_READY ||
       status === STATES.PROCESSING ||
       status === STATES.VERIFYING
     )) {
@@ -314,32 +277,23 @@
 
       const mutuals = profile.mutualConnections || 1;
       DOM.profileMutualsText.textContent = `${mutuals} mutual connection${mutuals > 1 ? 's' : ''}`;
-      DOM.profileBadgeState.textContent = 'QUALIFIED';
+      DOM.profileBadgeState.textContent = 'AUTO CONNECTING';
       DOM.profileBadgeState.className = 'profile-badge-state qualified';
-
-      // Show user confirmation buttons when waiting
-      if (status === STATES.WAITING_FOR_CONFIRMATION || status === STATES.PROFILE_READY) {
-        DOM.profileActionsBox.classList.remove('hidden');
-        DOM.countdownBanner.classList.add('hidden');
-      } else {
-        DOM.profileActionsBox.classList.add('hidden');
-      }
+      DOM.countdownBanner.classList.add('hidden');
     } else {
-      DOM.profileActionsBox.classList.add('hidden');
-
       if (status === STATES.DELAYING) {
-        DOM.profileName.textContent = 'Next Request Cooldown';
-        DOM.profileHeadline.textContent = '5-second safety cooldown between user-confirmed sends.';
+        DOM.profileName.textContent = 'Auto-Send Cooldown';
+        DOM.profileHeadline.textContent = '5-second safety delay between automated dispatches.';
         DOM.profileInitials.textContent = '5s';
-        DOM.profileBadgeState.textContent = 'DELAYING';
+        DOM.profileBadgeState.textContent = 'COOLDOWN';
         DOM.profileBadgeState.className = 'profile-badge-state';
-        DOM.profileMutualsText.textContent = 'Cooldown Active';
+        DOM.profileMutualsText.textContent = 'Next profile in queue';
 
         DOM.countdownBanner.classList.remove('hidden');
         DOM.countdownNum.textContent = currentState.countdownSeconds || 5;
       } else if (status === STATES.SCANNING) {
-        DOM.profileName.textContent = 'Scanning LinkedIn...';
-        DOM.profileHeadline.textContent = 'Looking for candidates with ≥1 mutual connection.';
+        DOM.profileName.textContent = 'Auto-Scanning LinkedIn...';
+        DOM.profileHeadline.textContent = 'Finding profiles with ≥1 mutual connection.';
         DOM.profileInitials.textContent = '🔍';
         DOM.profileBadgeState.textContent = 'SCANNING';
         DOM.profileBadgeState.className = 'profile-badge-state';
@@ -354,14 +308,14 @@
         DOM.countdownBanner.classList.add('hidden');
       } else if (status === STATES.PAUSED) {
         DOM.profileName.textContent = 'Session Paused';
-        DOM.profileHeadline.textContent = 'Click Resume to continue scanning for qualified profiles.';
+        DOM.profileHeadline.textContent = 'Click Resume to continue automated dispatch loop.';
         DOM.profileInitials.textContent = 'II';
         DOM.profileBadgeState.textContent = 'PAUSED';
         DOM.profileBadgeState.className = 'profile-badge-state';
         DOM.countdownBanner.classList.add('hidden');
       } else {
         DOM.profileName.textContent = 'No Profile Active';
-        DOM.profileHeadline.textContent = 'Start session on LinkedIn to begin scanning.';
+        DOM.profileHeadline.textContent = 'Start automated session on LinkedIn to begin.';
         DOM.profileInitials.textContent = 'CF';
         DOM.profileBadgeState.textContent = 'IDLE';
         DOM.profileBadgeState.className = 'profile-badge-state';
@@ -416,8 +370,6 @@
 
     const isActive = (
       status === STATES.SCANNING ||
-      status === STATES.WAITING_FOR_CONFIRMATION ||
-      status === STATES.PROFILE_READY ||
       status === STATES.PROCESSING ||
       status === STATES.VERIFYING ||
       status === STATES.DELAYING

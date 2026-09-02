@@ -1,7 +1,7 @@
 /**
  * ConnectFlow - LinkedIn Content Script Orchestrator
- * High-reliability qualification pipeline, user-confirmed dispatch action,
- * exact 5-second countdown cooldown, and comprehensive diagnostic logging.
+ * Fully automated mutual-connection loop (≥1 mutual required), fresh session counter reset (0/100),
+ * automatic click & verification, and exact 5-second cooldown without manual permission prompts.
  */
 
 (function () {
@@ -21,7 +21,7 @@
   function logDebug(tag, ...args) {
     if (DEBUG) {
       const time = new Date().toTimeString().split(' ')[0];
-      console.log(`%c[ConnectFlow] [${time}] ${tag}:`, 'color: #00d2ff; font-weight: bold;', ...args);
+      console.log(`%c[ConnectFlow] [${time}] ${tag}:`, 'color: #30d158; font-weight: bold;', ...args);
     }
   }
 
@@ -52,18 +52,11 @@
 
         switch (type) {
           case MESSAGE_TYPES.START_SESSION:
-            this.sentCount = payload?.state?.sentCount || 0;
+            // Fresh session resets counter to 0
+            this.sentCount = 0;
+            this.processedProfileKeys.clear();
+            this.processedElements = new WeakSet();
             this.start();
-            sendResponse({ success: true });
-            break;
-
-          case MESSAGE_TYPES.CONFIRM_SEND_REQUEST:
-            this.handleUserConfirmedSend();
-            sendResponse({ success: true });
-            break;
-
-          case MESSAGE_TYPES.SKIP_CURRENT_PROFILE:
-            this.handleUserSkip();
             sendResponse({ success: true });
             break;
 
@@ -113,21 +106,6 @@
       return timerId;
     }
 
-    setIntervalGuarded(fn, intervalMs) {
-      const intervalId = setInterval(() => {
-        try {
-          fn();
-        } catch (e) {
-          logDebug('ERROR in setIntervalGuarded', e);
-        }
-      }, intervalMs);
-      this.activeTimers.add(intervalId);
-      return () => {
-        clearInterval(intervalId);
-        this.activeTimers.delete(intervalId);
-      };
-    }
-
     cleanupCurrentOperation() {
       for (const timerId of this.activeTimers) {
         clearTimeout(timerId);
@@ -153,38 +131,38 @@
     }
 
     start() {
-      logDebug('START_SESSION', 'Initializing qualification scan...');
+      logDebug('START_AUTOMATED_LOOP', 'Initializing automated loop with fresh counter (0/100)...');
       this.isRunning = true;
       this.sessionRunId = 'run_' + Date.now();
       this.currentOperationId = 0;
       this.cleanupCurrentOperation();
       this.startObserver();
-      this.scanForNextQualified();
+      this.scanAndAutoProcessNext();
     }
 
     pause() {
-      logDebug('PAUSE_SESSION', 'Pausing active workflow...');
+      logDebug('PAUSE_SESSION', 'Pausing automated workflow...');
       this.isRunning = false;
       this.cleanupCurrentOperation();
     }
 
     resume() {
-      logDebug('RESUME_SESSION', 'Resuming workflow...');
+      logDebug('RESUME_SESSION', 'Resuming automated workflow...');
       this.isRunning = true;
       this.cleanupCurrentOperation();
       this.startObserver();
-      this.scanForNextQualified();
+      this.scanAndAutoProcessNext();
     }
 
     stop() {
-      logDebug('STOP_SESSION', 'Stopping and cleaning up all active operations...');
+      logDebug('STOP_SESSION', 'Stopping all actions...');
       this.isRunning = false;
       this.sessionRunId = null;
       this.cleanupCurrentOperation();
     }
 
     reset() {
-      logDebug('RESET_SESSION', 'Resetting session and cache...');
+      logDebug('RESET_SESSION', 'Resetting session...');
       this.stop();
       this.sentCount = 0;
       this.processedProfileKeys.clear();
@@ -206,9 +184,9 @@
     }
 
     /**
-     * Primary Qualification Scanner
+     * Scans for qualified profiles and automatically dispatches request on its own
      */
-    async scanForNextQualified() {
+    async scanAndAutoProcessNext() {
       if (!this.isRunning || this.isProcessing) return;
 
       const opId = ++this.currentOperationId;
@@ -217,24 +195,24 @@
       logDebug('Scan started', `Cycle opId=${opId}, sentCount=${this.sentCount}/${MAX_REQUESTS}`);
 
       if (this.sentCount >= MAX_REQUESTS) {
-        logDebug('LIMIT_REACHED', '100 requests reached. Halting session.');
+        logDebug('LIMIT_REACHED', '100 requests reached. Stopping session.');
         this.stop();
         return;
       }
 
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.STATE_TRANSITION,
-        payload: { nextState: STATES.SCANNING, statusDetail: 'Scanning page for qualified profiles (≥1 mutual connection)...' }
+        payload: { nextState: STATES.SCANNING, statusDetail: 'Auto-scanning for profiles with ≥1 mutual connection...' }
       });
 
       const candidate = this.findNextQualifiedCandidate(opId, runId);
 
       if (!candidate) {
-        logDebug('SCAN RESULT', 'No unvisited qualified profiles in current view. Scrolling page...');
+        logDebug('SCAN RESULT', 'No unvisited qualified profiles in current view. Scrolling page to load more...');
 
         chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.ACTIVITY_LOG,
-          payload: { message: 'No qualified candidates visible. Scrolling to load more profiles...', type: 'info' }
+          payload: { message: 'No qualified candidates visible. Scrolling page...', type: 'info' }
         });
 
         window.scrollBy({ top: 450, behavior: 'smooth' });
@@ -243,7 +221,7 @@
           if (this.isValidRun(opId, runId)) {
             const retryCandidate = this.findNextQualifiedCandidate(opId, runId);
             if (retryCandidate) {
-              this.presentQualifiedCandidate(retryCandidate, opId, runId);
+              this.executeCandidateLifecycle(retryCandidate, opId, runId);
             } else {
               this.scheduleNextScan(2000);
             }
@@ -253,11 +231,12 @@
         return;
       }
 
-      this.presentQualifiedCandidate(candidate, opId, runId);
+      // Automatically execute candidate lifecycle without asking for manual user permission
+      await this.executeCandidateLifecycle(candidate, opId, runId);
     }
 
     /**
-     * Scans DOM, processes skips with logging, updates diagnostics, and returns first qualified profile
+     * Discovers candidates, processes skipped profiles with logs, updates diagnostics
      */
     findNextQualifiedCandidate(opId, runId) {
       const scan = Detector.scanProfiles(document);
@@ -266,9 +245,7 @@
       logDebug('Connect candidates', scan.connectButtonsCount);
       logDebug('Profile cards found', scan.profileCardsCount);
       logDebug('Qualified profiles', scan.qualifiedCandidates.length);
-      logDebug('Current state', 'SCANNING');
 
-      // Update Diagnostics in background
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.UPDATE_DIAGNOSTICS,
         payload: {
@@ -282,7 +259,7 @@
         }
       });
 
-      // 1. Process and log skipped candidates first
+      // 1. Process and record skipped profiles
       for (const skipped of scan.skippedCandidates) {
         const key = skipped.metadata.profileKey;
         const btn = skipped.element;
@@ -308,7 +285,7 @@
         const btn = qualified.element;
 
         if (!this.processedProfileKeys.has(key) && !this.processedElements.has(btn)) {
-          logDebug('Candidate Qualified', `${qualified.metadata.name} — ${qualified.metadata.mutualConnections} mutuals`);
+          logDebug('Candidate Qualified', `${qualified.metadata.name} (${qualified.metadata.mutualConnections} mutuals)`);
           return qualified;
         }
       }
@@ -317,48 +294,30 @@
     }
 
     /**
-     * Highlights and presents qualified profile for user confirmation
+     * Executes the automatic connection dispatch lifecycle
      */
-    presentQualifiedCandidate(candidate, opId, runId) {
+    async executeCandidateLifecycle(candidate, opId, runId) {
       if (!this.isValidRun(opId, runId)) return;
 
+      this.isProcessing = true;
       this.currentCandidate = candidate;
+
       const profile = candidate.metadata;
       const button = candidate.element;
+      const initialText = button.textContent || '';
 
-      // Scroll into view & Highlight
+      this.processedProfileKeys.add(profile.profileKey);
+      this.processedElements.add(button);
+
+      logDebug('AUTO_CONNECT', `Auto-dispatching request to: ${profile.name} (${profile.mutualConnections} mutuals)`);
+
+      // Scroll into view & highlight
       try {
         candidate.cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } catch (e) {
         button.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       this.highlightCandidate(candidate);
-
-      // Notify background: Profile Qualified -> Waiting for User Confirmation
-      chrome.runtime.sendMessage({
-        type: MESSAGE_TYPES.PROFILE_QUALIFIED,
-        payload: { profile }
-      });
-    }
-
-    /**
-     * User clicks [ SEND REQUEST ] in popup -> Dispatches connection request
-     */
-    async handleUserConfirmedSend() {
-      if (!this.currentCandidate || this.isProcessing) return;
-
-      const candidate = this.currentCandidate;
-      const profile = candidate.metadata;
-      const button = candidate.element;
-      const initialText = button.textContent || '';
-      const opId = this.currentOperationId;
-      const runId = this.sessionRunId;
-
-      this.isProcessing = true;
-      this.processedProfileKeys.add(profile.profileKey);
-      this.processedElements.add(button);
-
-      logDebug('CONFIRMED_SEND', `User confirmed connection to ${profile.name}`);
 
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.REQUEST_PROCESSING,
@@ -375,11 +334,11 @@
       }, TIMEOUTS.GLOBAL_STEP_WATCHDOG);
 
       try {
-        // Step 1: Click Connect
-        logDebug('CLICK_ACTION', `Clicking Connect button for ${profile.name}`);
+        // Step 1: Automatically click Connect
+        logDebug('CLICK_ACTION', `Clicking Connect for ${profile.name}`);
         button.click();
 
-        // Step 2: Handle Modal (Send without a note)
+        // Step 2: Automatically handle "Send without a note" modal
         await this.handlePotentialModalWithTimeout(opId, runId, TIMEOUTS.MODAL_HANDLER_TIMEOUT);
 
         if (!this.isValidRun(opId, runId) || isStepFinished) return;
@@ -390,7 +349,7 @@
           payload: { profile }
         });
 
-        // Step 4: Verify Success
+        // Step 4: Verify Status changed to Pending
         const verified = await this.verifyActionSuccessWithTimeout(button, initialText, opId, runId, TIMEOUTS.VERIFICATION_TIMEOUT);
 
         if (!this.isValidRun(opId, runId) || isStepFinished) return;
@@ -409,7 +368,7 @@
             payload: { profile }
           });
 
-          // Start exact 5-second countdown cooldown
+          // Start exact 5-second countdown before automatically scanning next
           this.start5SecondCountdown(opId, runId);
         } else {
           logDebug('VERIFICATION_FAILED', `Verification timed out for ${profile.name}`);
@@ -442,38 +401,14 @@
     }
 
     /**
-     * User clicks [ SKIP ] in popup
-     */
-    handleUserSkip() {
-      if (!this.currentCandidate) return;
-
-      const profile = this.currentCandidate.metadata;
-      const btn = this.currentCandidate.element;
-
-      this.processedProfileKeys.add(profile.profileKey);
-      this.processedElements.add(btn);
-      this.clearHighlight();
-      this.currentCandidate = null;
-      this.isProcessing = false;
-
-      logDebug('USER_SKIP', `User skipped ${profile.name}`);
-      chrome.runtime.sendMessage({
-        type: MESSAGE_TYPES.PROFILE_DISQUALIFIED,
-        payload: { profile, reason: 'Skipped by user' }
-      });
-
-      this.scheduleNextScan(500);
-    }
-
-    /**
-     * Exact 5-Second Countdown Cooldown
+     * Exact 5-Second Countdown Cooldown between automated sends
      */
     start5SecondCountdown(opId, runId) {
       this.isProcessing = false;
       this.currentCandidate = null;
 
       if (this.sentCount >= MAX_REQUESTS) {
-        logDebug('LIMIT_REACHED', '100 requests reached. Stopping session.');
+        logDebug('LIMIT_REACHED', '100 requests reached. Stopping automated session.');
         this.stop();
         return;
       }
@@ -492,7 +427,7 @@
         }
 
         remaining -= 1;
-        logDebug('COUNTDOWN', `Next scan in ${remaining}s...`);
+        logDebug('COUNTDOWN', `Next auto-send in ${remaining}s...`);
 
         chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.COUNTDOWN_TICK,
@@ -502,7 +437,7 @@
         if (remaining <= 0) {
           clearInterval(this.countdownTimer);
           this.countdownTimer = null;
-          this.scanForNextQualified();
+          this.scanAndAutoProcessNext();
         }
       }, 1000);
     }
@@ -525,7 +460,7 @@
     scheduleNextScan(delayMs = 1500) {
       this.setTimeoutGuarded(() => {
         if (this.isRunning) {
-          this.scanForNextQualified();
+          this.scanAndAutoProcessNext();
         }
       }, delayMs);
     }
@@ -545,10 +480,10 @@
           }
         }, timeoutMs);
 
-        const checkInterval = this.setIntervalGuarded(() => {
+        const checkInterval = setInterval(() => {
           if (finished || !this.isValidRun(opId, runId)) {
             finished = true;
-            checkInterval();
+            clearInterval(checkInterval);
             clearTimeout(timer);
             resolve();
             return;
@@ -571,7 +506,7 @@
 
             if (sendBtn && !sendBtn.disabled) {
               finished = true;
-              checkInterval();
+              clearInterval(checkInterval);
               clearTimeout(timer);
               sendBtn.click();
               this.setTimeoutGuarded(resolve, 250);
@@ -581,7 +516,7 @@
             const modalText = (modal.textContent || '').toLowerCase();
             if (modalText.includes("you've reached the weekly invitation limit") || modalText.includes('invitation limit')) {
               finished = true;
-              checkInterval();
+              clearInterval(checkInterval);
               clearTimeout(timer);
               const dismissBtn = modal.querySelector('button[aria-label="Dismiss"], button[aria-label="Close"]');
               if (dismissBtn) dismissBtn.click();
@@ -604,10 +539,10 @@
           }
         }, timeoutMs);
 
-        const checkInterval = this.setIntervalGuarded(() => {
+        const checkInterval = setInterval(() => {
           if (finished || !this.isValidRun(opId, runId)) {
             finished = true;
-            checkInterval();
+            clearInterval(checkInterval);
             clearTimeout(timer);
             resolve(false);
             return;
@@ -616,7 +551,7 @@
           const classification = Detector.classifyButton(button);
           if (classification.status === 'PENDING') {
             finished = true;
-            checkInterval();
+            clearInterval(checkInterval);
             clearTimeout(timer);
             resolve(true);
             return;
@@ -625,7 +560,7 @@
           const currentText = (button.textContent || '').trim().toLowerCase();
           if (currentText.includes('pending') || currentText.includes('invitation sent')) {
             finished = true;
-            checkInterval();
+            clearInterval(checkInterval);
             clearTimeout(timer);
             resolve(true);
             return;
@@ -636,7 +571,7 @@
             const cardText = (card.textContent || '').toLowerCase();
             if (cardText.includes('pending') || cardText.includes('invitation sent')) {
               finished = true;
-              checkInterval();
+              clearInterval(checkInterval);
               clearTimeout(timer);
               resolve(true);
               return;
@@ -645,7 +580,7 @@
 
           if (!button.isConnected || button.disabled) {
             finished = true;
-            checkInterval();
+            clearInterval(checkInterval);
             clearTimeout(timer);
             resolve(true);
             return;
@@ -665,7 +600,7 @@
         badge.className = 'connectflow-badge-indicator';
         badge.id = 'connectflow-active-badge';
         const mutuals = candidate.metadata.mutualConnections || 1;
-        badge.textContent = `● Qualified (${mutuals} Mutuals)`;
+        badge.textContent = `● Auto-Connecting (${mutuals} Mutuals)`;
         target.appendChild(badge);
       }
     }

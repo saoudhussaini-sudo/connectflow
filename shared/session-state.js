@@ -1,7 +1,7 @@
 /**
  * ConnectFlow - Session State Manager
- * Authoritative state machine for mutual-connection qualification,
- * live countdown timer, and user-confirmed dispatch actions.
+ * Authoritative state machine for automated mutual-connection loop,
+ * fresh counter resets per session, live 5s countdown, and safety limits.
  */
 
 (function (root, factory) {
@@ -121,38 +121,38 @@
       return this.getState();
     }
 
-    async startSession() {
-      if (this.state.sentCount >= MAX_REQUESTS) {
-        this.state.status = STATES.LIMIT_REACHED;
-        this.state.statusDetail = 'Session complete. 100/100 limit reached.';
-        this.logActivity('Session complete — 100/100 limit reached.', 'limit');
-        await this.persist();
-        this.notify();
-        return this.getState();
+    /**
+     * Starts a new session — automatically resets counter to 0 per user requirement
+     */
+    async startSession(resetCounter = true) {
+      if (resetCounter) {
+        this.state.sentCount = 0;
+        this.state.skippedCount = 0;
+        this.state.errorCount = 0;
       }
 
       this.state.sessionRunId = 'run_' + Date.now();
       this.state.status = STATES.SCANNING;
       this.state.statusDetail = 'Scanning for qualified profiles (≥1 mutual connection)...';
-      if (!this.state.sessionStartTime) {
-        this.state.sessionStartTime = Date.now();
-      }
+      this.state.sessionStartTime = Date.now();
+      this.state.sessionEndTime = null;
       this.state.errorMessage = null;
       this.state.countdownSeconds = 0;
-      this.logActivity('Session started. Scanning with ≥1 mutual connection filter.', 'info');
+      this.state.currentProfile = null;
+
+      this.logActivity('New automated session started (counter reset to 0/100). Filter: ≥1 mutual connection.', 'info');
       await this.persist();
       this.notify();
       return this.getState();
     }
 
-    async setQualifiedProfile(profile) {
+    async setDetectedProfile(profile) {
       this.state.currentProfile = profile;
-      this.state.status = STATES.WAITING_FOR_CONFIRMATION;
+      this.state.status = STATES.PROCESSING;
       const count = profile.mutualConnections || 1;
-      this.state.statusDetail = `Qualified: ${profile.name} (${count} mutual connection${count > 1 ? 's' : ''})`;
+      this.state.statusDetail = `Auto-connecting: ${profile.name} (${count} mutual connection${count > 1 ? 's' : ''})`;
       
-      this.logActivity(`${profile.name} qualified — ${count} mutual connection${count > 1 ? 's' : ''}`, 'success');
-      this.logActivity(`Waiting for user confirmation for ${profile.name}`, 'info');
+      this.logActivity(`${profile.name} qualified (${count} mutuals) — sending request...`, 'info');
 
       await this.persist();
       this.notify();
@@ -169,14 +169,6 @@
     }
 
     async recordVerifiedRequest(profile) {
-      if (this.state.sentCount >= MAX_REQUESTS) {
-        this.state.status = STATES.LIMIT_REACHED;
-        this.state.statusDetail = 'Session complete. 100/100 limit reached.';
-        await this.persist();
-        this.notify();
-        return this.getState();
-      }
-
       this.state.sentCount += 1;
       const current = this.state.sentCount;
       const name = profile?.name || this.state.currentProfile?.name || 'Candidate';
@@ -188,12 +180,12 @@
         this.state.status = STATES.LIMIT_REACHED;
         this.state.statusDetail = '100 connection requests sent. Limit reached.';
         this.state.sessionEndTime = Date.now();
-        this.logActivity('Session limit reached (100/100). All actions stopped.', 'limit');
+        this.logActivity('Session limit reached (100/100). Automated loop completed.', 'limit');
       } else {
         this.state.status = STATES.DELAYING;
         this.state.countdownSeconds = 5;
-        this.state.statusDetail = `5-second cooldown before next scan (${current}/${MAX_REQUESTS})...`;
-        this.logActivity('5-second delay started.', 'info');
+        this.state.statusDetail = `5s cooldown before next auto-send (${current}/${MAX_REQUESTS})...`;
+        this.logActivity('5-second cooldown started.', 'info');
       }
 
       await this.persist();
@@ -205,11 +197,11 @@
       this.state.countdownSeconds = seconds;
       if (seconds > 0) {
         this.state.status = STATES.DELAYING;
-        this.state.statusDetail = `Next scan in ${seconds}s...`;
+        this.state.statusDetail = `Next auto-send in ${seconds}s...`;
       } else if (this.state.status === STATES.DELAYING) {
         this.state.status = STATES.SCANNING;
         this.state.statusDetail = 'Scanning for next qualified profile...';
-        this.logActivity('Scanning for next qualified profile', 'info');
+        this.logActivity('Scanning for next qualified profile...', 'info');
       }
       await this.persist();
       this.notify();
@@ -246,7 +238,7 @@
       }
 
       this.state.status = STATES.SCANNING;
-      this.state.statusDetail = 'Resumed. Scanning for qualified profiles...';
+      this.state.statusDetail = 'Resumed. Auto-scanning for qualified profiles...';
       this.logActivity('Session resumed.', 'info');
       await this.persist();
       this.notify();
@@ -269,10 +261,13 @@
     async resetSession() {
       this.state = {
         ...DEFAULT_STATE,
+        sentCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
         activityFeed: [],
         diagnostics: { ...DEFAULT_STATE.diagnostics }
       };
-      this.logActivity('Session reset. Ready to start.', 'info');
+      this.logActivity('Session reset to 0/100. Ready to start.', 'info');
       await this.persist();
       this.notify();
       return this.getState();
@@ -284,7 +279,7 @@
       this.state.status = STATES.ERROR;
       this.state.statusDetail = `Operation timed out (${stage}) on ${name}.`;
       this.state.errorMessage = `Timeout at stage: ${stage}`;
-      this.logActivity(`Action timed out on ${name} (${stage}). Request not counted.`, 'warning');
+      this.logActivity(`Action timed out on ${name} (${stage}). Request not counted. Continuing...`, 'warning');
       this.state.currentProfile = null;
       await this.persist();
       this.notify();
@@ -297,7 +292,7 @@
       this.state.status = STATES.ERROR;
       this.state.statusDetail = `Error: ${errorMessage}`;
       this.state.errorMessage = errorMessage;
-      this.logActivity(`Error on ${name}: ${errorMessage}. Request not counted.`, 'error');
+      this.logActivity(`Error on ${name}: ${errorMessage}. Continuing...`, 'error');
       this.state.currentProfile = null;
       await this.persist();
       this.notify();

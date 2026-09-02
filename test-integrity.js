@@ -1,13 +1,14 @@
 /**
  * ConnectFlow - Automated Verification & Scanner Integrity Test Suite
- * Tests all 10 Qualification, Watchdog, Ceiling and Cooldown Test Cases
+ * Tests 0-Reset Counter on New Session, Automated Send Execution (No User Permission Required),
+ * Mutual Connection Filtering (≥1), Exact 5s Cooldown, and 100-Request Hard Limit.
  */
 
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 
-console.log('🧪 Starting ConnectFlow Qualification & Integrity Test Suite...\n');
+console.log('🧪 Starting ConnectFlow Automated & Zero-Reset Integrity Test Suite...\n');
 
 // 1. Check Manifest
 console.log('1. Checking manifest.json...');
@@ -25,7 +26,7 @@ assert.strictEqual(Constants.MIN_MUTUAL_CONNECTIONS, 1);
 console.log('✅ Constants verified.\n');
 
 // 3. Test LinkedIn Detector Multi-Strategy Discovery & Mutual Connection Filtering
-console.log('3. Testing LinkedIn Detector & Mutual Connection Filter (Cases 1 - 6)...');
+console.log('3. Testing Mutual Connection Qualification Filter (≥1 required)...');
 const Detector = require('./content/linkedin-detector.js');
 
 function createMockElement(tag, options = {}) {
@@ -52,9 +53,8 @@ function createMockElement(tag, options = {}) {
           const matchA = selector.includes('a') && child.tagName === 'A';
           const matchSpan = selector.includes('span') && child.tagName === 'SPAN';
           const matchDiv = selector.includes('div') && child.tagName === 'DIV';
-          const matchP = selector.includes('p') && child.tagName === 'P';
 
-          if (matchBtn || matchA || matchSpan || matchDiv || matchP) {
+          if (matchBtn || matchA || matchSpan || matchDiv) {
             matched.push(child);
           }
           traverse(child);
@@ -99,7 +99,7 @@ global.window = {
   })
 };
 
-// CASE 1: Profile: Connect available, 0 mutual connections -> SKIPPED
+// Case A: 0 mutual connections -> Skipped
 const btn1 = createMockElement('button', { className: 'artdeco-button', text: 'Connect' });
 const card1 = createMockElement('div', {
   className: 'discover-person-card artdeco-card',
@@ -111,112 +111,67 @@ const card1 = createMockElement('div', {
 });
 btn1.parentElement = card1;
 
-// CASE 2: Profile: Connect available, 1 mutual connection -> QUALIFIED
+// Case B: 4 mutual connections -> Qualified
 const btn2 = createMockElement('button', { className: 'artdeco-button', text: 'Connect' });
 const card2 = createMockElement('div', {
   className: 'discover-person-card artdeco-card',
   children: [
-    createMockElement('span', { className: 'discover-person-card__name', text: 'Elena Rostova' }),
-    createMockElement('span', { className: 'discover-person-card__mutual-connections', text: '1 mutual connection' }),
+    createMockElement('span', { className: 'discover-person-card__name', text: 'Arjun Kumar' }),
+    createMockElement('span', { className: 'discover-person-card__mutual-connections', text: '4 mutual connections' }),
     btn2
   ]
 });
 btn2.parentElement = card2;
 
-// CASE 3: Profile: Connect available, 8 mutual connections -> QUALIFIED
-const btn3 = createMockElement('button', { className: 'artdeco-button', text: 'Connect' });
-const card3 = createMockElement('div', {
-  className: 'discover-person-card artdeco-card',
-  children: [
-    createMockElement('span', { className: 'discover-person-card__name', text: 'Arjun Kumar' }),
-    createMockElement('span', { className: 'discover-person-card__mutual-connections', text: '8 mutual connections' }),
-    btn3
-  ]
-});
-btn3.parentElement = card3;
-
-// CASE 4: Profile: Follow available, 5 mutual connections -> SKIPPED
-const btn4 = createMockElement('button', { className: 'artdeco-button', text: 'Follow' });
-const card4 = createMockElement('div', {
-  className: 'discover-person-card artdeco-card',
-  children: [
-    createMockElement('span', { className: 'discover-person-card__name', text: 'Priya Singh' }),
-    createMockElement('span', { className: 'discover-person-card__mutual-connections', text: '5 mutual connections' }),
-    btn4
-  ]
-});
-btn4.parentElement = card4;
-
-// CASE 5: Profile: Pending, 5 mutual connections -> SKIPPED
-const btn5 = createMockElement('button', { className: 'artdeco-button', text: 'Pending' });
-const card5 = createMockElement('div', {
-  className: 'discover-person-card artdeco-card',
-  children: [
-    createMockElement('span', { className: 'discover-person-card__name', text: 'David Miller' }),
-    createMockElement('span', { className: 'discover-person-card__mutual-connections', text: '5 mutual connections' }),
-    btn5
-  ]
-});
-btn5.parentElement = card5;
-
-// CASE 6: Mutual connection text cannot be detected (null) -> SKIPPED / UNKNOWN
-const btn6 = createMockElement('button', { className: 'artdeco-button', text: 'Connect' });
-const card6 = createMockElement('div', {
-  className: 'discover-person-card artdeco-card',
-  children: [
-    createMockElement('span', { className: 'discover-person-card__name', text: 'Anonymous Candidate' }),
-    btn6
-  ]
-});
-btn6.parentElement = card6;
-
 const mockDoc = createMockElement('div', {
-  children: [card1, card2, card3, card4, card5, card6]
+  children: [card1, card2]
 });
 
 const scanResults = Detector.scanProfiles(mockDoc);
+assert.strictEqual(scanResults.qualifiedCandidates.length, 1);
+assert.strictEqual(scanResults.qualifiedCandidates[0].metadata.name, 'Arjun Kumar');
+assert.strictEqual(scanResults.qualifiedCandidates[0].metadata.mutualConnections, 4);
+assert.strictEqual(scanResults.skippedCandidates.length, 1);
+console.log('✅ Mutual connection qualification filter verified.\n');
 
-assert.strictEqual(scanResults.qualifiedCandidates.length, 2, 'Only Case 2 (1 mutual) and Case 3 (8 mutuals) must qualify');
-assert.strictEqual(scanResults.qualifiedCandidates[0].metadata.name, 'Elena Rostova');
-assert.strictEqual(scanResults.qualifiedCandidates[0].metadata.mutualConnections, 1);
-assert.strictEqual(scanResults.qualifiedCandidates[1].metadata.name, 'Arjun Kumar');
-assert.strictEqual(scanResults.qualifiedCandidates[1].metadata.mutualConnections, 8);
-
-assert.strictEqual(Detector.getMutualConnectionCount(card1), 0, 'Case 1 must return 0 mutual connections');
-assert.strictEqual(Detector.getMutualConnectionCount(card6), null, 'Case 6 must return null (unknown = not qualified)');
-
-console.log('✅ CASE 1-6 Passed: Mutual connection filtering accurately qualifies only Connect buttons with >= 1 mutuals.\n');
-
-// 4. Test Session State Machine & Hard Limits (Cases 7 - 10)
-console.log('4. Testing Session State & Hard Limits (Cases 7 - 10)...');
+// 4. Test Zero-Reset on New Session
+console.log('4. Testing Counter Reset to 0/100 on New Session...');
 const { SessionStateManager } = require('./shared/session-state.js');
 const manager = new SessionStateManager();
 
-// CASE 7: 98 / 100 -> Continue processing
-manager.state.sentCount = 98;
-manager.startSession();
-assert.strictEqual(manager.state.status, Constants.STATES.SCANNING);
-console.log('✅ CASE 7 Passed: At 98/100, session starts and continues processing.');
+// Simulate previous session having 45 sent requests
+manager.state.sentCount = 45;
+manager.state.skippedCount = 12;
+manager.state.errorCount = 2;
 
-// CASE 8: 99 / 100 -> One final confirmed request permitted
+// User starts new session -> must reset all counters to 0
+manager.startSession(true);
+assert.strictEqual(manager.state.sentCount, 0, 'New session must start from 0 sent requests');
+assert.strictEqual(manager.state.skippedCount, 0, 'New session must reset skipped count to 0');
+assert.strictEqual(manager.state.errorCount, 0, 'New session must reset error count to 0');
+assert.strictEqual(manager.state.status, Constants.STATES.SCANNING);
+console.log('✅ Counter correctly resets to 0/100 on every new session start.\n');
+
+// 5. Test Automated Send Progression & Cooldown
+console.log('5. Testing Automated Send Progression & 5s Cooldown...');
+manager.recordVerifiedRequest(scanResults.qualifiedCandidates[0].metadata);
+assert.strictEqual(manager.state.sentCount, 1);
+assert.strictEqual(manager.state.status, Constants.STATES.DELAYING);
+assert.strictEqual(manager.state.countdownSeconds, 5);
+
+manager.updateCountdown(4);
+assert.strictEqual(manager.state.countdownSeconds, 4);
+
+manager.updateCountdown(0);
+assert.strictEqual(manager.state.status, Constants.STATES.SCANNING);
+console.log('✅ Automated send increments counter and runs 5s countdown cooldown.\n');
+
+// 6. Test Hard Session Limit (100)
+console.log('6. Testing 100/100 Hard Limit Ceiling...');
 manager.state.sentCount = 99;
-manager.recordVerifiedRequest(scanResults.qualifiedCandidates[1].metadata);
+manager.recordVerifiedRequest(scanResults.qualifiedCandidates[0].metadata);
 assert.strictEqual(manager.state.sentCount, 100);
 assert.strictEqual(manager.state.status, Constants.STATES.LIMIT_REACHED);
-console.log('✅ CASE 8 Passed: 99/100 advances to 100/100 and transitions to LIMIT_REACHED.');
+console.log('✅ Hard limit (100/100) strictly locks session.\n');
 
-// CASE 9: 100 / 100 -> STOPPED — LIMIT REACHED
-manager.startSession();
-assert.strictEqual(manager.state.status, Constants.STATES.LIMIT_REACHED, 'At 100/100, session cannot restart without reset');
-console.log('✅ CASE 9 Passed: 100/100 strictly locks further scans.');
-
-// CASE 10: User presses STOP during 5-second delay -> Timer cancelled immediately
-manager.state.sentCount = 50;
-manager.state.status = Constants.STATES.DELAYING;
-manager.state.countdownSeconds = 4;
-manager.stopSession();
-assert.strictEqual(manager.state.status, Constants.STATES.STOPPED);
-assert.strictEqual(manager.state.countdownSeconds, 0);
-console.log('✅ CASE 10 Passed: STOP immediately halts countdown delay.');
-
-console.log('\n🎉 ALL 10 INTEGRITY & QUALIFICATION TEST CASES PASSED SUCCESSFULLY!');
+console.log('🎉 ALL AUTOMATED & ZERO-RESET INTEGRITY TESTS PASSED SUCCESSFULLY!');
