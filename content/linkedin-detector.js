@@ -1,7 +1,7 @@
 /**
  * ConnectFlow - LinkedIn DOM Detection & Mutual Connection Qualification Module
- * Resilient multi-strategy Connect button discovery, robust mutual connection parser,
- * and strict profile qualification pipeline.
+ * Resilient multi-strategy Connect button discovery, robust mutual connection parser
+ * supporting truncated and varied LinkedIn DOM structures.
  */
 
 (function (root, factory) {
@@ -56,87 +56,78 @@
   }
 
   /**
-   * Inspects rendered profile card for visible mutual connection count.
-   * Returns:
-   *   - positive integer (e.g. 1, 5, 12)
-   *   - 0 (explicitly 0 or no mutuals)
-   *   - null (if mutual info cannot be confidently detected — UNKNOWN = NOT QUALIFIED)
-   */
-  function getMutualConnectionCount(profileCard) {
-    if (!profileCard || profileCard.nodeType !== 1) return null;
-
-    // Search common containers for mutuals
-    const mutualSelectors = [
-      '.discover-person-card__mutual-connections',
-      '.mn-discovery-person-card__mutual-connections',
-      '.entity-result__simple-insight',
-      '.entity-result__insight-text',
-      '.entity-result__insights',
-      '.member-insights',
-      'span.text-body-xsmall',
-      'div[class*="mutual"]',
-      'span[class*="mutual"]',
-      'p[class*="mutual"]'
-    ];
-
-    let fullCardText = normalizeText(profileCard.textContent || '');
-
-    // Check specific selectors first
-    for (const sel of mutualSelectors) {
-      try {
-        const els = profileCard.querySelectorAll(sel);
-        for (const el of els) {
-          const t = normalizeText(el.textContent || '');
-          const count = parseMutualNumber(t);
-          if (count !== null) return count;
-        }
-      } catch (e) {}
-    }
-
-    // Fallback: parse entire card text
-    return parseMutualNumber(fullCardText);
-  }
-
-  /**
-   * Helper to parse integer count from text snippet
+   * Parses integer count from mutual connection text strings.
+   * Handles truncated text like "HARSHITHA and 19 other mutual ...",
+   * "Syed Shah Abdul and 16 other mutual ...", "5 mutual connections", etc.
    */
   function parseMutualNumber(text) {
     if (!text) return null;
 
+    const normalized = normalizeText(text);
+
     // Explicit 0 / no mutuals
-    if (text.includes('no mutual connection') || text.includes('0 mutual connection')) {
+    if (
+      normalized.includes('no mutual connection') || 
+      normalized.includes('0 mutual connection') ||
+      normalized.includes('no mutual') ||
+      normalized.includes('0 mutual')
+    ) {
       return 0;
     }
 
-    // Pattern 1: "X and 12 other mutual connections" -> 12 + 1 = 13 or at least 12
-    const otherMatch = text.match(/(?:and\s+)?(\d+)\s+other\s+mutual\s+connections?/i);
+    // Pattern 1: "(and) X other mutual..." / "(and) X other mutual connections"
+    const otherMatch = normalized.match(/(?:and\s+)?(\d+)\s+other\s+mutual/i);
     if (otherMatch && otherMatch[1]) {
       const num = parseInt(otherMatch[1], 10);
-      return !isNaN(num) ? num + 1 : null;
+      return !isNaN(num) && num > 0 ? num + 1 : null;
     }
 
-    // Pattern 2: "1 mutual connection", "5 mutual connections"
-    const match = text.match(/(\d+)\s+mutual\s+connections?/i);
+    // Pattern 2: "X mutual connections" or "X mutual" or "X mutuals" or "X mutual ..."
+    const match = normalized.match(/(\d+)\s+mutual/i);
     if (match && match[1]) {
       const num = parseInt(match[1], 10);
-      return !isNaN(num) ? num : null;
+      return !isNaN(num) && num > 0 ? num : null;
     }
 
-    // Pattern 3: "3 mutuals", "1 mutual"
-    const shortMatch = text.match(/(\d+)\s+mutuals?(?:\s|$|\.|\,)/i);
-    if (shortMatch && shortMatch[1]) {
-      const num = parseInt(shortMatch[1], 10);
-      return !isNaN(num) ? num : null;
-    }
-
-    // Pattern 4: "1 connection in common", "4 connections in common"
-    const commonMatch = text.match(/(\d+)\s+connections?\s+in\s+common/i);
+    // Pattern 3: "X connection(s) in common"
+    const commonMatch = normalized.match(/(\d+)\s+connections?\s+in\s+common/i);
     if (commonMatch && commonMatch[1]) {
       const num = parseInt(commonMatch[1], 10);
-      return !isNaN(num) ? num : null;
+      return !isNaN(num) && num > 0 ? num : null;
+    }
+
+    // Pattern 4: General numbers associated with mutual / shared connections
+    const generalMatch = normalized.match(/(\d+)\s*(?:\+|other|shared)/i);
+    if (generalMatch && generalMatch[1] && (normalized.includes('mutual') || normalized.includes('common') || normalized.includes('connection'))) {
+      const num = parseInt(generalMatch[1], 10);
+      return !isNaN(num) && num > 0 ? num : null;
     }
 
     return null;
+  }
+
+  /**
+   * Inspects rendered profile card for visible mutual connection count.
+   */
+  function getMutualConnectionCount(profileCard) {
+    if (!profileCard || profileCard.nodeType !== 1) return null;
+
+    let combinedText = normalizeText(profileCard.textContent || '');
+
+    // Collect attributes from child images, svgs, and spans
+    try {
+      const children = profileCard.querySelectorAll('img, svg, a, span, div, p');
+      for (const el of children) {
+        const alt = el.getAttribute('alt') || '';
+        const aria = el.getAttribute('aria-label') || '';
+        const title = el.getAttribute('title') || '';
+        if (alt || aria || title) {
+          combinedText += ` ${normalizeText(alt)} ${normalizeText(aria)} ${normalizeText(title)}`;
+        }
+      }
+    } catch (e) {}
+
+    return parseMutualNumber(combinedText);
   }
 
   /**
@@ -188,9 +179,10 @@
 
     // 4. Genuine Connect Action Checks
     const hasPlainConnect = 
-      textContent === 'connect' || 
-      innerSpans.split(' ').some(w => w === 'connect') ||
-      textContent.split('\n').some(line => normalizeText(line) === 'connect');
+      textContent === 'connect' ||
+      textContent === '+ connect' ||
+      textContent.includes('connect') ||
+      innerSpans.includes('connect');
 
     const hasInviteConnect = 
       (ariaLabel.includes('invite') && ariaLabel.includes('connect')) ||
@@ -199,12 +191,7 @@
       ariaLabel.includes('connect with') ||
       ariaLabel.endsWith('to connect');
 
-    const hasConnectKeyword = 
-      (textContent.includes('connect') || ariaLabel.includes('connect')) && 
-      !combined.includes('remove connection') &&
-      !combined.includes('connection request sent');
-
-    if (hasPlainConnect || hasInviteConnect || hasConnectKeyword) {
+    if (hasPlainConnect || hasInviteConnect) {
       return { status: 'CONNECT_AVAILABLE', isEligible: true };
     }
 
@@ -428,23 +415,6 @@
             skipReason: reason
           });
         }
-      } else if (card) {
-        // Non-connect buttons (Follow / Pending / Message)
-        const metadata = extractProfileMetadata(card, btn);
-        const reason = classification.status === 'PENDING' 
-          ? 'Pending invitation'
-          : classification.status === 'FOLLOW' || classification.status === 'FOLLOWING'
-          ? 'Follow only'
-          : 'Connect unavailable';
-
-        results.skippedCandidates.push({
-          element: btn,
-          cardElement: card,
-          metadata,
-          classification,
-          isQualified: false,
-          skipReason: reason
-        });
       }
     }
 
@@ -454,6 +424,7 @@
   return {
     isVisible,
     normalizeText,
+    parseMutualNumber,
     getMutualConnectionCount,
     classifyButton,
     findCardContainer,
